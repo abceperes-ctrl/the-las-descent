@@ -17,13 +17,11 @@ function sm(label,action,cls=""){return`<button class="small-btn ${cls}" onclick
 function card(title,body){return`<article class="card"><h3 class="title">${title}</h3>${body}</article>`}
 function metric(icon,title,val,sub,cls=""){return`<article class="card metric${cls?" "+cls:""}"><h3 class="title">${icon} ${title}</h3><div class="value">${esc(String(val))}</div><div class="muted">${sub}</div></article>`}
 
-// ===== STATE =====
 const initialState={
   userName:"Royer",businessName:"Cedano Business",
   capital:1250000,savings:50000,
   mission:"Conseguir 3 clientes",moneyGoal:10000,moneyToday:5450,moneySpent:0,
-  xp:1250,productiveHours:0,dailyNote:"",
-  usdRate:59,
+  xp:1250,productiveHours:0,dailyNote:"",usdRate:59,
   habits:[
     {id:uid(),text:"Levantarme temprano",done:false,streak:0},
     {id:uid(),text:"Gym",done:false,streak:3},
@@ -72,9 +70,9 @@ const initialState={
   achievements:[
     {id:"a1",icon:"🥉",title:"Primera venta",desc:"Registrar primera venta de vaper",unlocked:true},
     {id:"a2",icon:"🥈",title:"30 días de disciplina",desc:"Completar hábitos 30 días seguidos",unlocked:false},
-    {id:"a3",icon:"🥇",title:"RD$1,000,000 de capital",desc:"Alcanzar RD$1M en patrimonio",unlocked:false},
+    {id:"a3",icon:"🥇",title:"RD\$1,000,000 de capital",desc:"Alcanzar RD\$1M en patrimonio",unlocked:false},
     {id:"a4",icon:"👑",title:"Empresario Élite",desc:"Completar todos los logros",unlocked:false},
-    {id:"a5",icon:"💰",title:"Primer RD$100,000 ahorrados",desc:"Ahorrar RD$100,000",unlocked:false},
+    {id:"a5",icon:"💰",title:"Primer RD\$100,000 ahorrados",desc:"Ahorrar RD\$100,000",unlocked:false},
     {id:"a6",icon:"⚡",title:"Meta 7 días seguidos",desc:"Cumplir la meta diaria 7 veces",unlocked:false}
   ],
   calendarEvents:[
@@ -83,10 +81,7 @@ const initialState={
   ],
   dailyRevenue:[4200,6800,3100,7500,5450,0,0],
   monthlyRevenue:[32000,45000,51000,38000,67000,72000],
-  lawExams:[],
-  disciplineScore:72,
-  pinEnabled:false,
-  pin:""
+  lawExams:[],disciplineScore:72,pinEnabled:false,pin:""
 };
 
 let state=loadState();
@@ -94,7 +89,7 @@ let currentTab="Inicio";
 let chartInstances={};
 let calendarMonth=new Date().getMonth();
 let calendarYear=new Date().getFullYear();
-let pinUnlocked=!state.pinEnabled;false
+let pinUnlocked=!state.pinEnabled;
 let darkMode=localStorage.getItem("CEDANO_THEME")!=="light";
 let editingId=null;
 let editingType=null;
@@ -106,38 +101,28 @@ function loadState(){
 function saveState(){localStorage.setItem(KEY,JSON.stringify(state))}
 function setState(patch){state={...state,...patch};saveState();render()}
 
-// ===== COMPUTED =====
 function completedTasks(){return state.tasks.filter(t=>t.done).length}
 function pendingTasks(){return state.tasks.filter(t=>!t.done).length}
 function progress(){return state.moneyGoal?Math.min(100,Math.round(state.moneyToday/state.moneyGoal*100)):0}
 function rank(){
-  if(state.xp>=5000)return"General";
-  if(state.xp>=3000)return"Coronel";
-  if(state.xp>=2000)return"Capitán";
-  if(state.xp>=1200)return"Mayor";
-  if(state.xp>=600)return"Sargento";
-  return"Recluta";
+  if(state.xp>=5000)return"General";if(state.xp>=3000)return"Coronel";
+  if(state.xp>=2000)return"Capitán";if(state.xp>=1200)return"Mayor";
+  if(state.xp>=600)return"Sargento";return"Recluta";
 }
 function rankIcon(){
-  if(state.xp>=5000)return"⭐⭐⭐";
-  if(state.xp>=3000)return"⭐⭐";
-  if(state.xp>=2000)return"⭐";
-  if(state.xp>=1200)return"🎖";
-  if(state.xp>=600)return"🏅";
-  return"🪖";
+  if(state.xp>=5000)return"⭐⭐⭐";if(state.xp>=3000)return"⭐⭐";
+  if(state.xp>=2000)return"⭐";if(state.xp>=1200)return"🎖";
+  if(state.xp>=600)return"🏅";return"🪖";
 }
 function nextRankXP(){
   if(state.xp<600)return 600;if(state.xp<1200)return 1200;
   if(state.xp<2000)return 2000;if(state.xp<3000)return 3000;
   if(state.xp<5000)return 5000;return 9999;
 }
-
-// Auto-calculate late days
 function calcLateDays(loan){
   if(!loan.dueDate)return loan.lateDays||0;
   const due=new Date(loan.dueDate);const now=new Date();
-  if(now>due){return Math.floor((now-due)/(1000*60*60*24))}
-  return 0;
+  return now>due?Math.floor((now-due)/(1000*60*60*24)):0;
 }
 function loanBalance(loan){
   const total=Number(loan.capital)+Number(loan.capital)*Number(loan.interest||0)/100;
@@ -149,91 +134,103 @@ function vaperInventoryValue(){return state.vaperInventory.reduce((s,p)=>s+Numbe
 function barberIncome(){return state.barberAppointments.reduce((s,a)=>s+Number(a.price||0),0)}
 function barberExpenseTotal(){return state.barberExpenses.reduce((s,e)=>s+Number(e.amount||0),0)}
 function patrimonyTotal(){return Number(state.capital)+totalLoanBalance()+vaperInventoryValue()+barberIncome()+Number(state.savings||0)}
-function loanStatusClass(status){
-  if(status==="Al día")return"status-verde";
-  if(status==="En mora")return"status-mora";
-  return"status-riesgo";
-}
-function loanStatusDot(status){
-  if(status==="Al día")return"🟢";
-  if(status==="En mora")return"🔴";
-  return"🟡";
-}
+function loanStatusClass(s){return s==="Al día"?"status-verde":s==="En mora"?"status-mora":"status-riesgo"}
+function loanStatusDot(s){return s==="Al día"?"🟢":s==="En mora"?"🔴":"🟡"}
 
-// ===== LOAN SCHEDULE =====
 function generateSchedule(loan){
   const total=Number(loan.capital)*(1+Number(loan.interest||0)/100);
   const freqMap={"Diario":1,"Semanal":7,"Quincenal":15,"Mensual":30};
   const days=freqMap[loan.frequency]||7;
   const start=loan.startDate?new Date(loan.startDate):new Date();
-  // estimate installments
-  const totalWeeks=Math.ceil(days===30?12:days===15?24:days===7?52:365);
-  const maxPayments=loan.frequency==="Diario"?30:loan.frequency==="Mensual"?12:loan.frequency==="Quincenal"?24:52;
-  const cuota=total/maxPayments;
-  const rows=[];
-  let remaining=total;let paid=Number(loan.paid||0);
-  for(let i=0;i<maxPayments&&remaining>0.01;i++){
+  const maxP=loan.frequency==="Diario"?30:loan.frequency==="Mensual"?12:loan.frequency==="Quincenal"?24:52;
+  const cuota=total/maxP;const rows=[];let remaining=total;let paid=Number(loan.paid||0);
+  for(let i=0;i<maxP&&remaining>0.01;i++){
     const d=new Date(start);d.setDate(d.getDate()+i*days);
-    const thisPayment=Math.min(cuota,remaining);
-    const isPaid=paid>=thisPayment*(i+1);
-    rows.push({n:i+1,date:d.toLocaleDateString("es-DO"),amount:thisPayment,paid:isPaid});
-    remaining-=thisPayment;
+    const thisPay=Math.min(cuota,remaining);
+    rows.push({n:i+1,date:d.toLocaleDateString("es-DO"),amount:thisPay,paid:paid>=thisPay*(i+1)});
+    remaining-=thisPay;
   }
   return rows;
 }
 
-// ===== TABS =====
 const tabs=[["Inicio","⌂"],["Mi Día","⚑"],["Préstamos","$"],["Vaper","☁"],["Barbería","✂"],["Reportes","▥"],["Imperio","♛"]];
 
 function renderTabs(){
-  $('#tabs').innerHTML=tabs.map(([name,icon])=>`
-    <button class="tab ${currentTab===name?"active":""}" onclick="go('${name}')">
-      <b>${icon}</b><span>${name}</span>
-    </button>`).join("");
+  document.getElementById("tabs").innerHTML=tabs.map(([name,icon])=>
+    `<button class="tab ${currentTab===name?"active":""}" onclick="go('${name}')"><b>${icon}</b><span>${name}</span></button>`
+  ).join("");
 }
 function go(tab){currentTab=tab;render()}
-
 function destroyCharts(){Object.values(chartInstances).forEach(c=>{try{c.destroy()}catch{}});chartInstances={}}
 
-// ===== PIN SCREEN =====
+// ===== PIN =====
 let pinEntry="";
 function renderPin(){
   return`<div class="pin-screen" id="pinScreen">
     <div style="font-size:40px">🔐</div>
     <h2 style="color:var(--neon)">Cedano Business</h2>
     <p style="color:var(--muted)">Ingresa tu PIN</p>
-    <div class="pin-dots">
-      ${[0,1,2,3].map(i=>`<div class="pin-dot${pinEntry.length>i?" filled":""}" id="pd${i}"></div>`).join("")}
-    </div>
+    <div class="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot${pinEntry.length>i?" filled":""}" id="pd${i}"></div>`).join("")}</div>
     <div id="pinError" style="color:var(--danger);min-height:20px;font-size:13px"></div>
-    <div class="pin-grid">
-      ${[1,2,3,4,5,6,7,8,9,"","0","⌫"].map(k=>`<button class="pin-btn" onclick="pinPress('${k}')">${k}</button>`).join("")}
-    </div>
+    <div class="pin-grid">${[1,2,3,4,5,6,7,8,9,"","0","⌫"].map(k=>`<button class="pin-btn" onclick="pinPress('${k}')">${k}</button>`).join("")}</div>
   </div>`;
 }
 function pinPress(k){
-  if(k==="⌫"){pinEntry=pinEntry.slice(0,-1)}
-  else if(k!==""){pinEntry+=k}
+  if(k==="⌫")pinEntry=pinEntry.slice(0,-1);
+  else if(k!=="")pinEntry+=k;
   updatePinDots();
   if(pinEntry.length===4){
-    if(pinEntry===state.pin){pinUnlocked=true;pinEntry="";document.getElementById("pinScreen").remove();render()}
-    else{document.getElementById("pinError").textContent="PIN incorrecto";pinEntry="";updatePinDots();setTimeout(()=>{const e=document.getElementById("pinError");if(e)e.textContent=""},1500)}
+    if(pinEntry===state.pin){
+      pinUnlocked=true;pinEntry="";
+      rebuildDOM();render();
+    } else {
+      const e=document.getElementById("pinError");
+      if(e)e.textContent="PIN incorrecto";
+      pinEntry="";updatePinDots();
+      setTimeout(()=>{const e=document.getElementById("pinError");if(e)e.textContent=""},1500);
+    }
   }
 }
-function updatePinDots(){[0,1,2,3].forEach(i=>{const d=document.getElementById(`pd${i}`);if(d){d.className="pin-dot"+(pinEntry.length>i?" filled":"")}})}
+function updatePinDots(){
+  [0,1,2,3].forEach(i=>{const d=document.getElementById("pd"+i);if(d)d.className="pin-dot"+(pinEntry.length>i?" filled":"")});
+}
 
-// ===== RENDER =====
+function rebuildDOM(){
+  document.body.innerHTML=`
+    <main class="app"><section id="screen"></section></main>
+    <nav class="tabs" id="tabs"></nav>
+    <div class="modal" id="nightModal"><div class="modal-inner"><div class="modal-head"><h2>🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div><div id="nightContent"></div></div></div>
+    <div class="modal" id="editModal"><div class="modal-inner"><div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div><div id="editContent"></div></div></div>
+    <div class="modal" id="detailModal"><div class="modal-inner"><div class="modal-head"><h2 id="detailTitle">Detalle</h2><button onclick="closeDetail()">×</button></div><div id="detailContent"></div></div></div>
+    <div class="modal" id="aiModal"><div class="modal-inner"><div class="modal-head"><h2>🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div><div id="aiContent">
+      <input id="aiInput" placeholder="Ej: ¿Cuánto gané esta semana?">
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px">
+        <button class="small-btn green" onclick="askAI('¿Cuánto gané esta semana?')">Esta semana</button>
+        <button class="small-btn green" onclick="askAI('¿Quiénes debo cobrar hoy?')">Cobrar hoy</button>
+        <button class="small-btn green" onclick="askAI('¿Qué negocio está creciendo más?')">Mayor crecimiento</button>
+        <button class="small-btn warn" onclick="askAI('¿Cuánto debo producir hoy para llegar a mi meta mensual?')">Meta mensual</button>
+        <button class="small-btn" onclick="askAI('Resumen de patrimonio total')">Patrimonio</button>
+      </div>
+      <button class="btn" style="margin-top:10px" onclick="runAI()">Preguntar ›</button>
+      <div id="aiResponse" class="summary-box" style="margin-top:12px;display:none"></div>
+    </div></div></div>`;
+}
+
 function render(){
-  if(state.pinEnabled&&!pinUnlocked){document.body.innerHTML=renderPin();return}
+  if(state.pinEnabled&&!pinUnlocked){
+    document.body.innerHTML=renderPin();
+    return;
+  }
+  if(!document.getElementById("screen"))rebuildDOM();
   destroyCharts();
   renderTabs();
   const views={
     "Inicio":renderHome,"Mi Día":renderMyDay,"Préstamos":renderLoans,
     "Vaper":renderVaper,"Barbería":renderBarber,"Reportes":renderReports,"Imperio":renderImperio
   };
-  $('#screen').innerHTML=views[currentTab]();
-  const bar=$("#moneyProgress");
-  if(bar)bar.style.width=`${progress()}%`;
+  document.getElementById("screen").innerHTML=views[currentTab]();
+  const bar=document.getElementById("moneyProgress");
+  if(bar)bar.style.width=progress()+"%";
   document.body.classList.toggle("light-mode",!darkMode);
   setTimeout(initCharts,100);
 }
@@ -242,12 +239,17 @@ function header(){
   return`<div class="topbar">
     <button class="icon-btn">☰</button>
     <div class="brand">CEDANO BUSINESS</div>
-    <button class="icon-btn" onclick="toggleTheme()" title="${darkMode?"Modo claro":"Modo oscuro"}">${darkMode?"☀":"🌙"}</button>
+    <button class="icon-btn" onclick="toggleTheme()">${darkMode?"☀":"🌙"}</button>
     <button class="icon-btn" onclick="openAI()">🧠</button>
   </div>`;
 }
-
-function toggleTheme(){darkMode=!darkMode;localStorage.setItem("CEDANO_THEME",darkMode?"dark":"light");document.body.classList.toggle("light-mode",!darkMode);const btn=$(".topbar .icon-btn:nth-child(3)");if(btn)btn.textContent=darkMode?"☀":"🌙"}
+function toggleTheme(){
+  darkMode=!darkMode;
+  localStorage.setItem("CEDANO_THEME",darkMode?"dark":"light");
+  document.body.classList.toggle("light-mode",!darkMode);
+  const b=document.querySelector(".topbar .icon-btn:nth-child(3)");
+  if(b)b.textContent=darkMode?"☀":"🌙";
+}
 
 // ===== HOME =====
 function renderHome(){
@@ -256,7 +258,8 @@ function renderHome(){
   const pendingC=state.contacts.filter(c=>c.status==="Pendiente").length;
   const taskPct=state.tasks.length?Math.round(completedTasks()/state.tasks.length*100):0;
   const todayCitas=state.barberAppointments.filter(a=>a.date===today()).length;
-  const lowStock=state.vaperInventory.filter(p=>Number(p.quantity)<=3).length;
+  const lowStockItems=state.vaperInventory.filter(p=>Number(p.quantity)<=3);
+  const moraLoans=state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora");
   const d=new Date();const hLeft=Math.max(0,22-d.getHours());
   return`
     ${header()}
@@ -269,10 +272,10 @@ function renderHome(){
     <section class="grid-3">
       ${metric("💵","Dinero hoy",money(state.moneyToday),"Generado")}
       ${metric("📅","Citas barbería",todayCitas,"Hoy")}
-      ${metric("⏰","Tiempo libre",`${hLeft}h`,"Estimado")}
+      ${metric("⏰","Tiempo libre",hLeft+"h","Estimado")}
     </section>
-    ${lowStock?`<div class="card" style="border-color:rgba(255,204,77,.6)"><p class="title" style="color:var(--warn)">⚠ Inventario bajo</p>${state.vaperInventory.filter(p=>Number(p.quantity)<=3).map(p=>`<p class="pill warn">☁ ${esc(p.product)} — ${p.quantity} uds.</p>`).join("")}</div>`:""}
-    ${mora?`<div class="card" style="border-color:rgba(255,77,94,.5)"><p class="title" style="color:var(--danger)">🔴 Clientes en mora</p>${state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora").map(l=>`<p class="pill danger">💸 ${esc(l.client)} — ${calcLateDays(l)} días</p>`).join("")}</div>`:""}
+    ${lowStockItems.length?`<div class="card" style="border-color:rgba(255,204,77,.6)"><p class="title" style="color:var(--warn)">⚠ Inventario bajo</p>${lowStockItems.map(p=>`<p class="pill warn">☁ ${esc(p.product)} — ${p.quantity} uds.</p>`).join("")}</div>`:""}
+    ${mora?`<div class="card" style="border-color:rgba(255,77,94,.5)"><p class="title" style="color:var(--danger)">🔴 Clientes en mora</p>${moraLoans.map(l=>`<p class="pill danger">💸 ${esc(l.client)} — ${calcLateDays(l)} días</p>`).join("")}</div>`:""}
     ${card("🎯 Misión del día",`<p>${esc(state.mission||"Sin misión establecida")}</p>${inp("missionInput","Ej: Conseguir 3 clientes")}<div class="row" style="margin-top:8px">${btn("Guardar","saveMission()")}${btn("✔ Completar (+50 XP)","completeMission()","secondary")}</div>`)}
     ${card("💰 Meta diaria",`<p class="big-money">${money(state.moneyGoal)}</p><p>Generado: ${money(state.moneyToday)}</p><div class="progress"><span id="moneyProgress"></span></div><p class="green">${progress()}% completado — faltan ${money(missing)}</p>${inp("goalInput","Meta RD$","number")}${inp("todayMoneyInput","Dinero generado hoy","number")}${btn("Guardar","saveMoney()")}`)}
     <section class="grid">
@@ -298,15 +301,14 @@ function renderMyDay(){
         <div class="habit-check">${h.done?"✓":""}</div>
         <span>${esc(h.text)}</span>
         <span class="pill green" style="margin-left:auto">${h.streak}🔥</span>
-      </div>`).join("")+`${inp("newHabitInput","Agregar hábito")}${btn("Agregar hábito","addHabit()")}`)}
+      </div>`).join("")+inp("newHabitInput","Agregar hábito")+btn("Agregar hábito","addHabit()"))}
     ${card("📊 Estadísticas personales",`
       <div class="grid-3">
         <div class="card metric"><div class="title">🏋 Gym</div><div class="value">${state.habitStats.daysTraining}</div><div class="muted">días seguidos</div></div>
         <div class="card metric"><div class="title">🎯 Metas</div><div class="value">${state.habitStats.daysMeta}</div><div class="muted">días cumplidos</div></div>
         <div class="card metric"><div class="title">😴 Sueño</div><div class="value">${state.habitStats.avgSleep}h</div><div class="muted">promedio</div></div>
       </div>
-      <div style="margin-top:12px">
-        <p class="label">Racha semanal</p>
+      <div style="margin-top:12px"><p class="label">Racha semanal</p>
         <div style="display:flex;gap:6px;margin-top:6px">
           ${["L","M","M","J","V","S","D"].map((d,i)=>`<div style="text-align:center"><div class="streak-box${i<5?" hit":""}"></div><small style="color:var(--muted);font-size:10px">${d}</small></div>`).join("")}
         </div>
@@ -316,9 +318,7 @@ function renderMyDay(){
       <div class="row">${sel("taskType",["Diario","Semanal","Mensual"],"Diario")}${sel("taskPriority",["Baja","Media","Alta","Urgente"],"Media")}</div>
       <div class="row">${inp("taskDate","Fecha")}${inp("taskTime","Hora")}</div>
       ${btn("Agregar tarea","addTask()")}
-      <div style="margin-top:12px">
-        ${state.tasks.length?state.tasks.map(taskHTML).join(""):`<div class="empty">No hay tareas.</div>`}
-      </div>`)}
+      <div style="margin-top:12px">${state.tasks.length?state.tasks.map(taskHTML).join(""):`<div class="empty">No hay tareas.</div>`}</div>`)}
     ${card("📅 Planificar Mañana",`
       ${inp("tomorrowMission","Misión principal mañana","text",state.tomorrow.mission)}
       ${inp("tomorrowGoal","Meta de dinero mañana","number",state.tomorrow.moneyGoal)}
@@ -351,7 +351,6 @@ function renderLoans(){
   const pending=state.contacts.filter(c=>c.status==="Pendiente").length;
   const interested=state.contacts.filter(c=>c.status==="Interesado").length;
   const converted=state.contacts.filter(c=>c.status==="Convertido").length;
-  const usdRate=Number(state.usdRate||59);
   return`
     <h1 class="section-title">💰 Módulo Préstamos</h1>
     <section class="grid-3">
@@ -359,33 +358,19 @@ function renderLoans(){
       ${metric("💵","Préstamos",state.loans.length,"Activos")}
       ${metric("⚠","En mora",state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora").length,"Clientes")}
     </section>
-
-    ${card("🔍 Buscar",`
-      <div class="search-box">
-        ${inp("loanSearch","Buscar cliente o préstamo...")}
-        ${sm("🔍","filterLoans()","green")}
-      </div>`)}
-
+    ${card("🔍 Buscar",`<div class="search-box">${inp("loanSearch","Buscar cliente o préstamo...")}${sm("🔍","filterLoans()","green")}</div>`)}
     ${card("🧮 Calculadora de préstamos",`
       <div class="row">${inp("calcCapital","Capital","number")}${inp("calcInterest","Interés %","number")}</div>
       <div class="row">${sel("calcFreq",["Diario","Semanal","Quincenal","Mensual"],"Semanal")}${inp("calcPeriods","Períodos","number")}</div>
       ${btn("Calcular","calcLoan()")}
       <div class="calc-result" id="calcResult" style="display:none"></div>`)}
-
     ${card("➕ Agregar cliente",`
-      ${inp("clientName","Nombre completo")}
-      ${inp("clientCedula","Cédula")}
-      ${inp("clientPhone","Teléfono")}
-      ${inp("clientAddress","Dirección")}
-      ${inp("clientReference","Referencia personal")}
-      ${ta("clientNotes","Notas")}
+      ${inp("clientName","Nombre completo")}${inp("clientCedula","Cédula")}
+      ${inp("clientPhone","Teléfono")}${inp("clientAddress","Dirección")}
+      ${inp("clientReference","Referencia personal")}${ta("clientNotes","Notas")}
       ${btn("Guardar cliente","addLoanClient()")}`)}
-
     <h2 class="section-title">Clientes</h2>
-    <div id="clientList">
-      ${state.loanClients.map(clientHTML).join("")}
-    </div>
-
+    <div id="clientList">${state.loanClients.map(clientHTML).join("")}</div>
     ${card("📇 Personas por contactar",`
       <div class="row" style="margin-bottom:10px">
         <span class="pill warn">⏳ Pendientes: ${pending}</span>
@@ -396,32 +381,24 @@ function renderLoans(){
       ${inp("contactSource","Fuente del contacto")}${ta("contactNote","Nota")}
       ${sel("contactPriority",["Baja","Media","Alta"],"Media")}
       ${btn("Agregar persona","addContact()")}`)}
-
     <div id="contactList">${state.contacts.map(contactHTML).join("")}</div>
-
     ${card("📝 Crear préstamo",`
       <div class="currency-toggle">
         <button class="currency-btn active" id="btnRD" onclick="setCurrency('RD$')">RD$</button>
         <button class="currency-btn" id="btnUSD" onclick="setCurrency('USD')">USD</button>
       </div>
-      <div style="display:none" id="usdRateRow"><p class="muted" style="font-size:12px;margin-bottom:6px">Tasa de cambio: RD$<span id="rateDisplay">${usdRate}</span>/USD</p></div>
+      <div style="display:none" id="usdRateRow"><p class="muted" style="font-size:12px;margin-bottom:6px">Tasa: RD$${Number(state.usdRate||59)}/USD</p></div>
       ${inp("loanClient","Cliente")}${inp("loanCapital","Capital prestado","number")}
       ${inp("loanInterest","Interés %","number")}${inp("loanStartDate","Fecha de inicio","text",today())}
       ${inp("loanDueDate","Fecha de vencimiento")}
       ${sel("loanFrequency",["Diario","Semanal","Quincenal","Mensual"],"Semanal")}
       ${btn("Guardar préstamo","addLoan()")}`)}
-
     <h2 class="section-title">Préstamos activos</h2>
-    <div id="loanList">
-      ${state.loans.map(loanHTML).join("")}
-    </div>
-
+    <div id="loanList">${state.loans.map(loanHTML).join("")}</div>
     ${card("💳 Registrar pago",`
-      ${inp("paymentLoan","Nombre del cliente")}
-      ${inp("paymentAmount","Monto pagado","number")}
+      ${inp("paymentLoan","Nombre del cliente")}${inp("paymentAmount","Monto pagado","number")}
       ${inp("paymentDate","Fecha","text",today())}
       ${btn("Registrar pago","addPayment()")}`)}
-
     ${card("📊 Resumen préstamos",`
       <p>Total prestado: ${money(state.loans.reduce((s,l)=>s+Number(l.capital||0),0))}</p>
       <p>Por cobrar: ${money(totalLoanBalance())}</p>
@@ -437,43 +414,35 @@ function setCurrency(cur){
   const row=document.getElementById("usdRateRow");
   if(row)row.style.display=cur==="USD"?"block":"none";
 }
-
 function filterLoans(){
   const q=(document.getElementById("loanSearch")?.value||"").toLowerCase();
-  const cl=document.getElementById("clientList");
-  const ll=document.getElementById("loanList");
-  const co=document.getElementById("contactList");
+  const cl=document.getElementById("clientList");const ll=document.getElementById("loanList");const co=document.getElementById("contactList");
   if(cl)cl.innerHTML=state.loanClients.filter(c=>c.name.toLowerCase().includes(q)).map(clientHTML).join("");
   if(ll)ll.innerHTML=state.loans.filter(l=>l.client.toLowerCase().includes(q)).map(loanHTML).join("");
   if(co)co.innerHTML=state.contacts.filter(c=>c.name.toLowerCase().includes(q)).map(contactHTML).join("");
 }
-
 function calcLoan(){
   const capital=Number(document.getElementById("calcCapital")?.value||0);
   const interest=Number(document.getElementById("calcInterest")?.value||0);
   const freq=document.getElementById("calcFreq")?.value||"Semanal";
   const periods=Number(document.getElementById("calcPeriods")?.value||12);
   if(!capital)return;
-  const total=capital*(1+interest/100);
-  const cuota=total/periods;
-  const ganancia=total-capital;
+  const total=capital*(1+interest/100);const cuota=total/periods;const ganancia=total-capital;
   const el=document.getElementById("calcResult");
   if(el){el.style.display="block";el.innerHTML=`
     <p>💵 Capital: <strong>${money(capital)}</strong></p>
     <p>💰 Total a cobrar: <strong>${money(total)}</strong></p>
     <p class="green">📈 Ganancia: <strong>${money(ganancia)}</strong></p>
     <p>📅 Cuota ${freq.toLowerCase()}: <strong>${money(cuota)}</strong></p>
-    <p class="muted">En ${periods} ${freq.toLowerCase()==="mensual"?"meses":freq.toLowerCase()==="quincenal"?"quincenas":"períodos"}</p>`}
+    <p class="muted">En ${periods} períodos</p>`}
 }
 
 function clientHTML(c){
   const clientLoans=state.loans.filter(l=>l.client.toLowerCase()===c.name.toLowerCase());
   return`<article class="card">
     <h3 class="title">👤 ${esc(c.name)}</h3>
-    <p>Cédula: ${esc(c.cedula)}</p>
-    <p>Teléfono: ${esc(c.phone)}</p>
-    <p>Dirección: ${esc(c.address)}</p>
-    <p>Referencia: ${esc(c.reference)}</p>
+    <p>Cédula: ${esc(c.cedula)} | Tel: ${esc(c.phone)}</p>
+    <p>Dirección: ${esc(c.address)} | Ref: ${esc(c.reference)}</p>
     <p class="muted">${esc(c.notes)}</p>
     <p class="muted">Última visita: ${esc(c.lastVisit||"N/A")}</p>
     ${clientLoans.map(l=>`<div style="margin-top:8px"><span class="status-badge ${loanStatusClass(l.status)}">${loanStatusDot(l.status)} ${l.status}</span> <span class="muted">Balance: ${money(loanBalance(l))}</span></div>`).join("")}
@@ -487,11 +456,9 @@ function clientHTML(c){
 function contactHTML(c){
   return`<article class="card">
     <h3 class="title">📇 ${esc(c.name)}</h3>
-    <p>${esc(c.phone||"Sin teléfono")}</p>
-    <p>${esc(c.address||"Sin dirección")}</p>
+    <p>${esc(c.phone||"Sin teléfono")} | ${esc(c.address||"Sin dirección")}</p>
     <p class="muted">${esc(c.note||"")}</p>
-    <span class="pill green">${c.priority}</span>
-    <span class="pill">${c.status}</span>
+    <span class="pill green">${c.priority}</span><span class="pill">${c.status}</span>
     <div class="row" style="margin-top:10px">
       ${sm("📞 Llamar","callContact('"+c.id+"')","")}
       ${sm("💬 WhatsApp","whatsappCobro('"+c.id+"')","")}
@@ -538,22 +505,17 @@ function loanHTML(loan){
   </article>`;
 }
 
-// WhatsApp cobro templates
 function whatsappCobro(contactId){
-  const c=state.contacts.find(x=>x.id===contactId);
-  if(!c)return;
+  const c=state.contacts.find(x=>x.id===contactId);if(!c)return;
   const msg=`Hola ${c.name}, te recordamos que tienes un seguimiento pendiente en Cedano Business. Por favor comunícate con nosotros. 🙏`;
   window.open(`https://wa.me/${(c.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 function whatsappLoan(loanId){
-  const l=state.loans.find(x=>x.id===loanId);
-  if(!l)return;
+  const l=state.loans.find(x=>x.id===loanId);if(!l)return;
   const balance=loanBalance(l);const lateDays=calcLateDays(l);
   const msg=`Hola ${l.client}, te recordamos que tienes un pago pendiente de *${money(balance)}* en Cedano Business.${lateDays>0?` Llevas *${lateDays} días de atraso*.`:""} Por favor realiza tu pago a la brevedad. Gracias 🙏`;
-  // find phone from loanClients
   const client=state.loanClients.find(c=>c.name.toLowerCase()===l.client.toLowerCase());
-  const phone=client?.phone||"";
-  window.open(`https://wa.me/${phone.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
+  window.open(`https://wa.me/${(client?.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 
 // ===== VAPER =====
@@ -583,7 +545,8 @@ function renderVaper(){
       ${inp("vaperClientName","Nombre")}${inp("vaperClientPhone","Teléfono")}${ta("vaperClientHistory","Historial")}
       ${btn("Agregar cliente","addVaperClient()")}
       ${state.vaperClients.map(cl=>`<div class="list-item" style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><strong>${esc(cl.name)}</strong> <span class="muted">${esc(cl.phone)}</span><p class="muted">${esc(cl.history)}</p><p class="green">Total gastado: ${money(cl.totalSpent)}</p></div>
+        <div><strong>${esc(cl.name)}</strong> <span class="muted">${esc(cl.phone)}</span>
+        <p class="muted">${esc(cl.history)}</p><p class="green">Total gastado: ${money(cl.totalSpent)}</p></div>
         ${sm("🗑","deleteRecord('vaperClient','"+cl.id+"')","red")}
       </div>`).join("")}`)}`;
 }
@@ -595,8 +558,7 @@ function filterVaper(){
 }
 
 function vaperProductHTML(p){
-  const gain=Number(p.price)-Number(p.cost);
-  const low=Number(p.quantity)<=3;
+  const gain=Number(p.price)-Number(p.cost);const low=Number(p.quantity)<=3;
   return`<article class="card" style="${low?"border-color:rgba(255,204,77,.6)":""}">
     <h3 class="title">☁ ${esc(p.product)} ${low?'<span class="pill warn">⚠ Stock bajo</span>':''}</h3>
     <p>Marca: ${esc(p.brand)} | Modelo: ${esc(p.model)} | Sabor: ${esc(p.flavor)} | Tipo: ${esc(p.type)}</p>
@@ -668,7 +630,9 @@ function renderBarber(){
       <div class="row">${inp("employeeSchedule","Horario")}${inp("employeePaid","Pagos realizados","number")}</div>
       ${btn("Agregar empleado","addEmployee()")}
       ${state.barberEmployees.map(e=>`<div class="list-item" style="display:flex;justify-content:space-between;align-items:center">
-        <div><strong>${esc(e.name)}</strong> — ${e.percent}% comisión<br><span class="muted">${esc(e.schedule)}</span><span class="pill green" style="margin-left:8px">Comisión: ${money(barberIncome()*e.percent/100)}</span></div>
+        <div><strong>${esc(e.name)}</strong> — ${e.percent}% comisión<br>
+        <span class="muted">${esc(e.schedule)}</span>
+        <span class="pill green" style="margin-left:8px">Comisión: ${money(barberIncome()*e.percent/100)}</span></div>
         ${sm("🗑","deleteRecord('employee','"+e.id+"')","red")}
       </div>`).join("")}`)}
     ${card("💰 Finanzas Barbería",`
@@ -682,7 +646,6 @@ function renderBarber(){
 function filterBarber(){
   const q=(document.getElementById("barberSearch")?.value||"").toLowerCase();
   const el=document.getElementById("barberAptList");
-  const cl=document.getElementById("barberClientList");
   if(el)el.innerHTML=state.barberAppointments.filter(a=>a.client.toLowerCase().includes(q)).map(a=>`<article class="card">
     <h3 class="title">✂ ${esc(a.client)}</h3>
     <p>${esc(a.service)} | ${esc(a.date)} ${esc(a.time)}</p>
@@ -692,14 +655,12 @@ function filterBarber(){
 }
 
 function whatsappBarber(aptId){
-  const a=state.barberAppointments.find(x=>x.id===aptId);
-  if(!a)return;
-  const msg=`Hola ${a.client} 💈, te recordamos que tienes una cita en la barbería el *${a.date}* a las *${a.time}* para un *${a.service}*. Precio: *${money(a.price)}*. ¡Te esperamos!`;
+  const a=state.barberAppointments.find(x=>x.id===aptId);if(!a)return;
+  const msg=`Hola ${a.client} 💈, te recordamos tu cita en la barbería el *${a.date}* a las *${a.time}* para *${a.service}*. Precio: *${money(a.price)}*. ¡Te esperamos!`;
   window.open(`https://wa.me/${(a.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 function whatsappBarberClient(clientId){
-  const c=state.barberClients.find(x=>x.id===clientId);
-  if(!c)return;
+  const c=state.barberClients.find(x=>x.id===clientId);if(!c)return;
   const msg=`Hola ${c.name} 💈, te contactamos desde Cedano Barbería. ¿Deseas agendar una cita?`;
   window.open(`https://wa.me/${(c.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
@@ -716,7 +677,7 @@ function renderReports(){
       ${metric("✂","Barbería",money(barberIncome()-barberExpenseTotal()),"Ganancia")}
     </section>
     ${card("📅 Calendario",renderCalendar())}
-    ${card("📈 Ganancias diarias (última semana)",`<div class="chart-wrap"><canvas id="chartDaily"></canvas></div>`)}
+    ${card("📈 Ganancias diarias",`<div class="chart-wrap"><canvas id="chartDaily"></canvas></div>`)}
     ${card("📊 Ganancias mensuales",`<div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>`)}
     ${card("🏢 Rendimiento por negocio",`<div class="chart-wrap"><canvas id="chartBusiness"></canvas></div>`)}
     ${card("💰 Patrimonio total",patrimonioHTML())}
@@ -733,8 +694,8 @@ function renderReports(){
         ${btn("📥 Importar backup","importBackupTrigger()","secondary")}
       </div>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(this)">
-      ${btn("📊 Exportar CSV Préstamos","exportCSV('loans')","secondary")}
-      ${btn("📊 Exportar CSV Ventas Vaper","exportCSV('vaper')","secondary")}
+      ${btn("📊 CSV Préstamos","exportCSV('loans')","secondary")}
+      ${btn("📊 CSV Ventas Vaper","exportCSV('vaper')","secondary")}
       ${btn("🖨 Imprimir reporte","window.print()","secondary")}`)}
     ${card("🔒 Seguridad PIN",`
       <p class="muted" style="margin-bottom:10px">Protege la app con un PIN de 4 dígitos.</p>
@@ -753,28 +714,24 @@ function renderReports(){
     ${state.history.length?state.history.map(dayHTML).join(""):`<div class="card"><div class="empty">Guarda un cierre nocturno para ver el historial.</div></div>`}`;
 }
 
-// ===== CALENDAR =====
 function renderCalendar(){
   const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const weekDays=["L","M","M","J","V","S","D"];
   const firstDay=new Date(calendarYear,calendarMonth,1);
   const lastDay=new Date(calendarYear,calendarMonth+1,0);
-  let startDow=firstDay.getDay();if(startDow===0)startDow=7;// Mon=1
+  let startDow=firstDay.getDay();if(startDow===0)startDow=7;
   const todayStr=today();
-  // gather events
   const eventsByDate={};
   state.calendarEvents.forEach(e=>{if(!eventsByDate[e.date])eventsByDate[e.date]=[];eventsByDate[e.date].push(e)});
   state.barberAppointments.forEach(a=>{if(!eventsByDate[a.date])eventsByDate[a.date]=[];eventsByDate[a.date].push({type:"cita",title:a.client})});
   state.loans.forEach(l=>{if(!l.dueDate)return;if(!eventsByDate[l.dueDate])eventsByDate[l.dueDate]=[];eventsByDate[l.dueDate].push({type:"cobro",title:"Vence: "+l.client})});
-
   let cells=[];
-  for(let i=1;i<startDow;i++)cells.push({empty:true,prevMonth:true});
+  for(let i=1;i<startDow;i++)cells.push({empty:true});
   for(let d=1;d<=lastDay.getDate();d++){
     const ds=`${calendarYear}-${String(calendarMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     cells.push({d,ds,events:eventsByDate[ds]||[],isToday:ds===todayStr});
   }
   while(cells.length%7!==0)cells.push({empty:true});
-
   return`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <button class="small-btn" onclick="prevMonth()">◀</button>
@@ -782,9 +739,8 @@ function renderCalendar(){
       <button class="small-btn" onclick="nextMonth()">▶</button>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap">
-      <span class="cal-dot cobro" style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px"></span><small>Cobro</small>
-      <span class="cal-dot cita" style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px"></span><small>Cita</small>
-      <span class="cal-dot pago" style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px"></span><small>Pago</small>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--neon);margin-right:4px"></span><small>Cobro</small>
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--purple);margin-right:4px"></span><small>Cita</small>
     </div>
     <div class="cal-grid">
       ${weekDays.map(d=>`<div style="text-align:center;font-size:11px;color:var(--muted);font-weight:800;padding-bottom:4px">${d}</div>`).join("")}
@@ -840,32 +796,27 @@ function dayHTML(day){
 function initCharts(){
   const days=["L","M","M","J","V","S","D"];
   const months=["Ene","Feb","Mar","Abr","May","Jun"];
-  const chartOpts={
-    responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false}},
-    scales:{
-      x:{grid:{color:"rgba(128,128,128,.1)"},ticks:{color:getComputedStyle(document.documentElement).getPropertyValue("--muted")||"#a8b0b7"}},
-      y:{grid:{color:"rgba(128,128,128,.1)"},ticks:{color:"#a8b0b7",callback:v=>"RD$"+v.toLocaleString()}}
-    }
-  };
-  const barColor="rgba(34,212,104,.75)";
+  const tickColor="#a8b0b7";
+  const chartOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:"rgba(128,128,128,.1)"},ticks:{color:tickColor}},
+            y:{grid:{color:"rgba(128,128,128,.1)"},ticks:{color:tickColor,callback:v=>"RD$"+v.toLocaleString()}}}};
   const dEl=document.getElementById("chartDaily");
-  if(dEl)chartInstances.daily=new Chart(dEl,{type:"bar",data:{labels:days,datasets:[{data:state.dailyRevenue,backgroundColor:barColor,borderRadius:6}]},options:chartOpts});
+  if(dEl)chartInstances.daily=new Chart(dEl,{type:"bar",data:{labels:days,datasets:[{data:state.dailyRevenue,backgroundColor:"rgba(34,212,104,.75)",borderRadius:6}]},options:chartOpts});
   const mEl=document.getElementById("chartMonthly");
   if(mEl)chartInstances.monthly=new Chart(mEl,{type:"line",data:{labels:months,datasets:[{data:state.monthlyRevenue,borderColor:"#22d468",backgroundColor:"rgba(34,212,104,.1)",fill:true,tension:.4}]},options:chartOpts});
   const bEl=document.getElementById("chartBusiness");
   if(bEl)chartInstances.biz=new Chart(bEl,{type:"doughnut",data:{
     labels:["Préstamos","Vaper","Barbería"],
     datasets:[{data:[totalLoanBalance(),vaperGain(),barberIncome()],backgroundColor:["#22d468","#4db5ff","#c084fc"],borderColor:"transparent"}]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:"#a8b0b7"}}}}});
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tickColor}}}}});
 }
 
 // ===== IMPERIO =====
 function renderImperio(){
   const total=patrimonyTotal();
-  const xpPct=Math.min(100,Math.round((state.xp/nextRankXP())*100));
+  const xpPct=Math.min(100,Math.round(state.xp/nextRankXP()*100));
   const habitsCompleted=state.habits.filter(h=>h.done).length;
-  const discipline=Math.round((habitsCompleted/state.habits.length)*100)||0;
+  const discipline=Math.round(habitsCompleted/state.habits.length*100)||0;
   return`
     <div class="imperio-hero">
       <div class="imperio-rank">${rankIcon()}</div>
@@ -878,7 +829,7 @@ function renderImperio(){
     </div>
     <section class="grid">
       ${metric("💰","Patrimonio total",money(total),"Actualizado")}
-      ${metric("📈","Disciplina hoy",`${discipline}%`,"Hábitos completados")}
+      ${metric("📈","Disciplina hoy",discipline+"%","Hábitos completados")}
       ${metric("⚔","XP total",state.xp,"Puntos")}
       ${metric("🏆","Rango",rank(),"Nivel actual")}
     </section>
@@ -1011,8 +962,7 @@ function deleteRecord(type,id){
 
 // ===== BACKUP =====
 function exportBackup(){
-  const json=JSON.stringify(state,null,2);
-  const blob=new Blob([json],{type:"application/json"});
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
   a.download=`cedano-backup-${today()}.json`;a.click();
 }
@@ -1027,7 +977,7 @@ function importBackup(input){
   reader.readAsText(file);
 }
 
-// ===== CSV EXPORT =====
+// ===== CSV =====
 function exportCSV(type){
   let rows=[];let filename="";
   if(type==="loans"){
@@ -1044,13 +994,17 @@ function exportCSV(type){
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;a.click();
 }
 
-// ===== PIN =====
+// ===== PIN MANAGEMENT =====
 function savePin(){
   const p=document.getElementById("newPin")?.value;
   if(!p||p.length!==4||isNaN(p)){alert("Ingresa exactamente 4 dígitos numéricos.");return}
-  state.pinEnabled=false;state.pin=p;pinUnlocked=true;saveState();render();alert("✅ PIN activado.");
+  state.pinEnabled=true;state.pin=p;pinUnlocked=true;
+  saveState();render();alert("✅ PIN activado.");
 }
-function disablePin(){state.pinEnabled=false;state.pin="";pinUnlocked=true;saveState();render();alert("PIN desactivado.")}
+function disablePin(){
+  state.pinEnabled=false;state.pin="";pinUnlocked=true;
+  saveState();render();alert("PIN desactivado.");
+}
 
 // ===== ACTIONS =====
 function saveMission(){const v=document.getElementById("missionInput")?.value.trim();if(!v)return;setState({mission:v})}
@@ -1067,10 +1021,9 @@ function toggleHabit(id){
     return{...h,done,streak:done?h.streak+1:Math.max(0,h.streak-1)};
   });saveState();render();
 }
-
 function addTask(){
   const text=document.getElementById("taskText")?.value.trim();if(!text)return;
-  state.tasks.push({id:uid(),text,type:document.getElementById("taskType")?.value||"Diario",date:document.getElementById("taskDate")?.value,time:document.getElementById("taskTime")?.value,priority:document.getElementById("taskPriority")?.value||"Media",done:false});
+  state.tasks.push({id:uid(),text,type:document.getElementById("taskType")?.value||"Diario",date:document.getElementById("taskDate")?.value||"",time:document.getElementById("taskTime")?.value||"",priority:document.getElementById("taskPriority")?.value||"Media",done:false});
   saveState();render();
 }
 function toggleTask(id){
@@ -1078,14 +1031,14 @@ function toggleTask(id){
   saveState();render();
 }
 function saveTomorrowPlan(){
-  const task=document.getElementById("tomorrowTask")?.value.trim();const reminder=document.getElementById("tomorrowReminder")?.value.trim();
+  const task=document.getElementById("tomorrowTask")?.value.trim();
+  const reminder=document.getElementById("tomorrowReminder")?.value.trim();
   state.tomorrow.mission=document.getElementById("tomorrowMission")?.value||"";
   state.tomorrow.moneyGoal=document.getElementById("tomorrowGoal")?.value||"";
   if(task)state.tomorrow.tasks.push({id:uid(),text:task,done:false});
   if(reminder)state.tomorrow.reminders.push({id:uid(),text:reminder});
   saveState();render();
 }
-
 function addLoanClient(){
   const name=document.getElementById("clientName")?.value.trim();if(!name)return;
   state.loanClients.push({id:uid(),name,photo:"",cedula:document.getElementById("clientCedula")?.value||"",phone:document.getElementById("clientPhone")?.value||"",address:document.getElementById("clientAddress")?.value||"",reference:document.getElementById("clientReference")?.value||"",notes:document.getElementById("clientNotes")?.value||"",lastVisit:today()});
@@ -1101,13 +1054,10 @@ function setContactStatus(id,status){state.contacts=state.contacts.map(c=>c.id==
 function callContact(id){const c=state.contacts.find(c=>c.id===id);if(c)alert(`Llamar a ${c.name}: ${c.phone||"Sin teléfono"}`)}
 function whatsappContact(id){const c=state.contacts.find(c=>c.id===id);if(c)window.open(`https://wa.me/${(c.phone||"").replace(/\D/g,"")}?text=Hola%20${encodeURIComponent(c.name)}`,"_blank")}
 function deleteContact(id){state.contacts=state.contacts.filter(c=>c.id!==id);saveState();render()}
-
 function addLoan(){
   const client=document.getElementById("loanClient")?.value.trim();const capital=Number(document.getElementById("loanCapital")?.value);if(!client||!capital)return;
-  const currency=loanCurrency;
-  let capitalRD=capital;
-  if(currency==="USD")capitalRD=capital*Number(state.usdRate||59);
-  state.loans.push({id:uid(),client,capital:capitalRD,interest:Number(document.getElementById("loanInterest")?.value||0),currency,startDate:document.getElementById("loanStartDate")?.value||today(),dueDate:document.getElementById("loanDueDate")?.value||"",frequency:document.getElementById("loanFrequency")?.value||"Semanal",paid:0,lateDays:0,status:"Al día"});
+  let capitalRD=capital;if(loanCurrency==="USD")capitalRD=capital*Number(state.usdRate||59);
+  state.loans.push({id:uid(),client,capital:capitalRD,interest:Number(document.getElementById("loanInterest")?.value||0),currency:loanCurrency,startDate:document.getElementById("loanStartDate")?.value||today(),dueDate:document.getElementById("loanDueDate")?.value||"",frequency:document.getElementById("loanFrequency")?.value||"Semanal",paid:0,lateDays:0,status:"Al día"});
   saveState();render();
 }
 function updateLoanStatus(id){const status=document.getElementById("loanstatus-"+id)?.value;state.loans=state.loans.map(l=>l.id===id?{...l,status}:l);saveState();render()}
@@ -1117,7 +1067,6 @@ function addPayment(){
   state.loans=state.loans.map(l=>l.client.toLowerCase()===client.toLowerCase()?{...l,paid:Number(l.paid||0)+amount}:l);
   state.moneyToday+=amount;saveState();render();
 }
-
 function addVaperProduct(){
   const product=document.getElementById("vpProduct")?.value.trim();if(!product)return;
   state.vaperInventory.push({id:uid(),product,brand:document.getElementById("vpBrand")?.value||"",model:document.getElementById("vpModel")?.value||"",type:document.getElementById("vpType")?.value||"Desechable",flavor:document.getElementById("vpFlavor")?.value||"",quantity:Number(document.getElementById("vpQty")?.value||0),cost:Number(document.getElementById("vpCost")?.value||0),price:Number(document.getElementById("vpPrice")?.value||0)});
@@ -1138,7 +1087,6 @@ function addVaperClient(){
   state.vaperClients.push({id:uid(),name,phone:document.getElementById("vaperClientPhone")?.value||"",history:document.getElementById("vaperClientHistory")?.value||"",totalSpent:0});
   saveState();render();
 }
-
 function addBarberAppointment(){
   const client=document.getElementById("barberClient")?.value.trim();if(!client)return;
   const price=Number(document.getElementById("barberPrice")?.value||0);
@@ -1184,7 +1132,10 @@ function openNightSummary(){
     ${btn("✕ Cerrar","closeNightSummary()","secondary")}`;
   document.getElementById("nightModal").classList.add("open");
 }
-function toggleNC(i){const item=document.getElementById("nc"+i);const check=document.getElementById("nch"+i);const done=!item.classList.contains("done");item.classList.toggle("done",done);check.textContent=done?"✓":""}
+function toggleNC(i){
+  const item=document.getElementById("nc"+i);const check=document.getElementById("nch"+i);
+  const done=!item.classList.contains("done");item.classList.toggle("done",done);check.textContent=done?"✓":"";
+}
 function closeNightSummary(){document.getElementById("nightModal").classList.remove("open")}
 function saveNightSummary(){
   const reached=state.moneyToday>=state.moneyGoal;
@@ -1220,9 +1171,7 @@ function resetData(){
   localStorage.removeItem(KEY);state=structuredClone(initialState);pinUnlocked=true;saveState();render();
 }
 
-// Clock
 setInterval(()=>{const c=document.getElementById("clock");if(c)c.textContent=new Date().toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"})},1000);
 
-// Init theme
 document.body.classList.toggle("light-mode",!darkMode);
 render();
