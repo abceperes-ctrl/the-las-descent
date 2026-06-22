@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cedano Business</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<main class="app"><section id="screen"></section></main>
+<nav class="tabs" id="tabs"></nav>
+
+<!-- Night modal -->
+<div class="modal" id="nightModal">
+  <div class="modal-inner">
+    <div class="modal-head"><h2>🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div>
+    <div id="nightContent"></div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal" id="editModal">
+  <div class="modal-inner">
+    <div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div>
+    <div id="editContent"></div>
+  </div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal" id="detailModal">
+  <div class="modal-inner">
+    <div class="modal-head"><h2 id="detailTitle">Detalle</h2><button onclick="closeDetail()">×</button></div>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<!-- AI modal -->
+<div class="modal" id="aiModal">
+  <div class="modal-inner">
+    <div class="modal-head"><h2>🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div>
+    <div id="aiContent">
+      <input id="aiInput" placeholder="Ej: ¿Cuánto gané esta semana?">
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px">
+        <button class="small-btn green" onclick="askAI('¿Cuánto gané esta semana?')">Esta semana</button>
+        <button class="small-btn green" onclick="askAI('¿Quiénes debo cobrar hoy?')">Cobrar hoy</button>
+        <button class="small-btn green" onclick="askAI('¿Qué negocio está creciendo más?')">Mayor crecimiento</button>
+        <button class="small-btn warn" onclick="askAI('¿Cuánto debo producir hoy para llegar a mi meta mensual?')">Meta mensual</button>
+        <button class="small-btn" onclick="askAI('Resumen de patrimonio total')">Patrimonio</button>
+      </div>
+      <button class="btn" style="margin-top:10px" onclick="runAI()">Preguntar ›</button>
+      <div id="aiResponse" class="summary-box" style="margin-top:12px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
