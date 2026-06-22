@@ -94,7 +94,7 @@ let currentTab="Inicio";
 let chartInstances={};
 let calendarMonth=new Date().getMonth();
 let calendarYear=new Date().getFullYear();
-let pinUnlocked=!state.pinEnabled;
+let pinUnlocked=!state.pinEnabled;false
 let darkMode=localStorage.getItem("CEDANO_THEME")!=="light";
 let editingId=null;
 let editingType=null;
@@ -1048,7 +1048,7 @@ function exportCSV(type){
 function savePin(){
   const p=document.getElementById("newPin")?.value;
   if(!p||p.length!==4||isNaN(p)){alert("Ingresa exactamente 4 dígitos numéricos.");return}
-  state.pinEnabled=true;state.pin=p;pinUnlocked=true;saveState();render();alert("✅ PIN activado.");
+  state.pinEnabled=false;state.pin=p;pinUnlocked=true;saveState();render();alert("✅ PIN activado.");
 }
 function disablePin(){state.pinEnabled=false;state.pin="";pinUnlocked=true;saveState();render();alert("PIN desactivado.")}
 
