@@ -2,58 +2,139 @@
 <html lang="es">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)"/>
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>
+  <meta name="description" content="Panel de negocios Cedano — préstamos, barbería y vaper"/>
+  <meta name="author" content="Cedano Business"/>
+  <meta property="og:title" content="Cedano Business"/>
+  <meta property="og:description" content="Panel de control de negocios: préstamos, barbería, vaper y más."/>
+  <meta property="og:type" content="website"/>
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="Cedano"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
   <title>Cedano Business</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="preload" href="styles.css" as="style" onload="this.rel='stylesheet'"/>
   <link rel="stylesheet" href="styles.css"/>
+  <noscript><link rel="stylesheet" href="styles.css"/></noscript>
 </head>
 <body>
-<main class="app"><section id="screen"></section></main>
-<nav class="tabs" id="tabs"></nav>
 
-<!-- Night modal -->
-<div class="modal" id="nightModal">
+<main class="app">
+  <section id="screen">
+    <div class="skeleton-loader" id="skeletonLoader" aria-hidden="true">
+      <div class="skel-topbar"></div>
+      <div class="skel-hero"></div>
+      <div class="skel-row">
+        <div class="skel-card"></div>
+        <div class="skel-card"></div>
+        <div class="skel-card"></div>
+      </div>
+      <div class="skel-block"></div>
+      <div class="skel-block short"></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs" role="navigation" aria-label="Navegación principal"></nav>
+
+<!-- BÚSQUEDA GLOBAL -->
+<div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
   <div class="modal-inner">
-    <div class="modal-head"><h2>🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div>
+    <div class="modal-head">
+      <h2 id="searchTitle">🔍 Búsqueda global</h2>
+      <button onclick="closeModal('searchModal')" aria-label="Cerrar">×</button>
+    </div>
+    <div id="searchContent">
+      <input id="globalSearchInput" placeholder="Buscar clientes, préstamos, citas..." aria-label="Búsqueda global" oninput="runGlobalSearch(this.value)"/>
+      <div id="globalSearchResults" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Cierre Nocturno -->
+<div class="modal" id="nightModal" role="dialog" aria-modal="true" aria-labelledby="nightModalTitle">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <h2 id="nightModalTitle">🌙 Cierre Nocturno</h2>
+      <button onclick="closeNightSummary()" aria-label="Cerrar modal">×</button>
+    </div>
     <div id="nightContent"></div>
   </div>
 </div>
 
-<!-- Edit modal -->
-<div class="modal" id="editModal">
+<!-- Modal: Editar -->
+<div class="modal" id="editModal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
   <div class="modal-inner">
-    <div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div>
+    <div class="modal-head">
+      <h2 id="editTitle">Editar</h2>
+      <button onclick="closeEditModal()" aria-label="Cerrar modal">×</button>
+    </div>
     <div id="editContent"></div>
   </div>
 </div>
 
-<!-- Detail modal -->
-<div class="modal" id="detailModal">
+<!-- Modal: Detalle -->
+<div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
   <div class="modal-inner">
-    <div class="modal-head"><h2 id="detailTitle">Detalle</h2><button onclick="closeDetail()">×</button></div>
+    <div class="modal-head">
+      <h2 id="detailTitle">Detalle</h2>
+      <button onclick="closeDetail()" aria-label="Cerrar modal">×</button>
+    </div>
     <div id="detailContent"></div>
   </div>
 </div>
 
-<!-- AI modal -->
-<div class="modal" id="aiModal">
+<!-- Modal: IA -->
+<div class="modal" id="aiModal" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
   <div class="modal-inner">
-    <div class="modal-head"><h2>🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div>
+    <div class="modal-head">
+      <h2 id="aiModalTitle">🧠 IA Cedano</h2>
+      <button onclick="closeAI()" aria-label="Cerrar modal">×</button>
+    </div>
     <div id="aiContent">
-      <input id="aiInput" placeholder="Ej: ¿Cuánto gané esta semana?">
+      <input id="aiInput" placeholder="Ej: ¿Cuánto gané esta semana?" aria-label="Pregunta para la IA"/>
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px">
         <button class="small-btn green" onclick="askAI('¿Cuánto gané esta semana?')">Esta semana</button>
         <button class="small-btn green" onclick="askAI('¿Quiénes debo cobrar hoy?')">Cobrar hoy</button>
         <button class="small-btn green" onclick="askAI('¿Qué negocio está creciendo más?')">Mayor crecimiento</button>
         <button class="small-btn warn" onclick="askAI('¿Cuánto debo producir hoy para llegar a mi meta mensual?')">Meta mensual</button>
         <button class="small-btn" onclick="askAI('Resumen de patrimonio total')">Patrimonio</button>
+        <button class="small-btn" onclick="askAI('¿Qué productos vaper debo reponer esta semana?')">Reponer stock</button>
+        <button class="small-btn blue" onclick="askAI('Dame consejos para crecer mis préstamos este mes')">Consejos</button>
+        <button class="small-btn blue" onclick="askAI('¿Cómo está mi disciplina y hábitos esta semana?')">Mi disciplina</button>
       </div>
       <button class="btn" style="margin-top:10px" onclick="runAI()">Preguntar ›</button>
-      <div id="aiResponse" class="summary-box" style="margin-top:12px;display:none"></div>
+      <div id="aiResponse" class="summary-box" style="margin-top:12px;display:none" aria-live="polite" aria-atomic="true"></div>
     </div>
   </div>
 </div>
 
-<script src="app.js"></script>
+<!-- Modal: Historial de pagos -->
+<div class="modal" id="payHistModal" role="dialog" aria-modal="true" aria-labelledby="payHistTitle">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <h2 id="payHistTitle">💳 Historial de pagos</h2>
+      <button onclick="closeModal('payHistModal')" aria-label="Cerrar">×</button>
+    </div>
+    <div id="payHistContent"></div>
+  </div>
+</div>
+
+<!-- Modal: Onboarding -->
+<div class="modal" id="onboardModal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle" style="z-index:60">
+  <div class="modal-inner">
+    <div class="modal-head">
+      <h2 id="onboardTitle">👋 Bienvenido a Cedano Business</h2>
+      <button onclick="closeOnboard()" aria-label="Cerrar">×</button>
+    </div>
+    <div id="onboardContent"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<script src="app.js" defer></script>
 </body>
 </html>
