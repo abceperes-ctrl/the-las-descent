@@ -1,26 +1,21 @@
 /* =====================================================================
-   CEDANO BUSINESS — app.js v4.0
-   Mejoras v4:
-   ✅ Búsqueda global (clientes, préstamos, citas, vaper)
-   ✅ Archivar préstamos cancelados (historial separado)
-   ✅ Historial de pagos filtrable por cliente y fecha
-   ✅ Stock mínimo configurable por producto
-   ✅ Alerta automática de restock con lista de productos
-   ✅ Comisiones automáticas por barbero desde citas completadas
-   ✅ Comparación mes vs mes anterior en Reportes
-   ✅ Reporte PDF imprimible mejorado con todos los datos
-   ✅ Notificación visual de cobros vencidos en el header
-   ✅ Onboarding de primera vez con tour por módulos
-   ✅ Multi-moneda real con tasa editable en vivo
-   ✅ Historial de cortes con notas por cliente de barbería
-   ✅ Fix bug duplicación en calendario
-   ✅ Fix comisiones calculadas desde citas reales por empleado
-   ✅ Préstamos archivados movidos a sección separada
-   ✅ Contador de notificaciones en tab bar
-   ✅ Exportar reporte mensual completo
+   CEDANO BUSINESS — app.js v5.0
+   Mejoras v5:
+   ✅ Reset automático diario a medianoche
+   ✅ Morning Brief automático según hora del día
+   ✅ Historial de 90 días (era 7)
+   ✅ IA con historial de conversación en sesión
+   ✅ Notas rápidas flotantes desde cualquier pantalla
+   ✅ Modo Enfoque
+   ✅ Cierre nocturno automático a las 9PM
+   ✅ Racha real de hábitos basada en fechas reales
+   ✅ Flujo contacto → cliente préstamo automático
+   ✅ Bug fix: moneda en balances de préstamos USD
+   ✅ Service Worker para funcionamiento offline
+   ✅ Backup automático semanal con recordatorio
    ===================================================================== */
 
-const KEY = "CEDANO_V4";
+const KEY = "CEDANO_V5";
 const $ = s => document.querySelector(s);
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
@@ -28,8 +23,9 @@ function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-function money(v, cur) {
+function money(v, currency) {
   const n = Number(v || 0);
+  const cur = currency || "RD$";
   if (cur === "USD") return `US$${n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   return `RD$${n.toLocaleString("es-DO")}`;
 }
@@ -74,21 +70,25 @@ function hideSkeleton() {
 const initialState = {
   userName: "Royer", businessName: "Cedano Business",
   capital: 1250000, savings: 50000,
-  mission: "Conseguir 3 clientes", moneyGoal: 10000, moneyToday: 5450, moneySpent: 0,
+  mission: "Conseguir 3 clientes", moneyGoal: 10000, moneyToday: 0, moneySpent: 0,
   xp: 1250, productiveHours: 0, dailyNote: "", usdRate: 59,
+  lastOpenDate: "",
+  lastBackupDate: "",
+  focusMode: false,
+  quickNotes: [],
   habits: [
-    { id: uid(), text: "Levantarme temprano", done: false, streak: 0 },
-    { id: uid(), text: "Gym", done: false, streak: 3 },
-    { id: uid(), text: "Estudiar Derecho", done: false, streak: 1 },
-    { id: uid(), text: "Revisar negocios", done: false, streak: 5 },
-    { id: uid(), text: "Dormir temprano", done: false, streak: 2 }
+    { id: uid(), text: "Levantarme temprano", done: false, streak: 0, lastDone: "" },
+    { id: uid(), text: "Gym", done: false, streak: 3, lastDone: "" },
+    { id: uid(), text: "Estudiar Derecho", done: false, streak: 1, lastDone: "" },
+    { id: uid(), text: "Revisar negocios", done: false, streak: 5, lastDone: "" },
+    { id: uid(), text: "Dormir temprano", done: false, streak: 2, lastDone: "" }
   ],
   habitStats: { daysTraining: 3, daysMeta: 5, avgSleep: 6.5 },
   tasks: [
-    { id: uid(), text: "Cobrar a Pedro", type: "Diario", priority: "Alta", date: today(), time: "10:00 AM", done: true },
-    { id: uid(), text: "Comprar líquido para vapers", type: "Diario", priority: "Media", date: today(), time: "2:00 PM", done: false },
-    { id: uid(), text: "Ir al gimnasio", type: "Diario", priority: "Baja", date: today(), time: "7:00 PM", done: true },
-    { id: uid(), text: "Revisar gastos de la barbería", type: "Semanal", priority: "Urgente", date: today(), time: "8:30 PM", done: false }
+    { id: uid(), text: "Cobrar a Pedro", type: "Diario", priority: "Alta", date: today(), time: "10:00 AM", done: false, completedAt: "" },
+    { id: uid(), text: "Comprar líquido para vapers", type: "Diario", priority: "Media", date: today(), time: "2:00 PM", done: false, completedAt: "" },
+    { id: uid(), text: "Ir al gimnasio", type: "Diario", priority: "Baja", date: today(), time: "7:00 PM", done: false, completedAt: "" },
+    { id: uid(), text: "Revisar gastos de la barbería", type: "Semanal", priority: "Urgente", date: today(), time: "8:30 PM", done: false, completedAt: "" }
   ],
   tomorrow: { mission: "", moneyGoal: "", tasks: [], reminders: [], followups: [] },
   history: [],
@@ -102,7 +102,7 @@ const initialState = {
   loans: [
     { id: uid(), client: "Pedro Gómez", capital: 15000, interest: 20, currency: "RD$", startDate: today(), dueDate: "", frequency: "Semanal", paid: 3000, lateDays: 0, status: "En mora" }
   ],
-  archivedLoans: [], /* ✅ NUEVO: préstamos cancelados archivados */
+  archivedLoans: [],
   payments: [],
   vaperInventory: [
     { id: uid(), product: "Vaper Blue Ice", brand: "Elf Bar", model: "BC5000", type: "Desechable", flavor: "Blue Ice", quantity: 8, cost: 450, price: 750, minStock: 3 },
@@ -134,12 +134,12 @@ const initialState = {
     { id: uid(), date: today(), title: "Cobro Pedro", type: "cobro", time: "10:00 AM" },
     { id: uid(), date: today(), title: "Cita Carlos", type: "cita", time: "6:00 PM" }
   ],
-  dailyRevenue: [4200, 6800, 3100, 7500, 5450, 0, 0],
+  dailyRevenue: [0,0,0,0,0,0,0],
   monthlyRevenue: [32000, 45000, 51000, 38000, 67000, 72000],
-  prevMonthRevenue: [28000, 40000, 46000, 34000, 60000, 65000], /* ✅ NUEVO: mes anterior */
+  prevMonthRevenue: [28000, 40000, 46000, 34000, 60000, 65000],
   lawExams: [], disciplineScore: 72, pinEnabled: false, pin: "",
-  onboardingDone: false, /* ✅ NUEVO: onboarding */
-  notifSettings: { loanOverdueDays: 3, lowStockDefault: 3 } /* ✅ NUEVO */
+  onboardingDone: false,
+  notifSettings: { loanOverdueDays: 3, lowStockDefault: 3 }
 };
 
 let state = loadState();
@@ -151,26 +151,146 @@ let pinUnlocked = !state.pinEnabled;
 let darkMode = localStorage.getItem("CEDANO_THEME") !== "light";
 let editingId = null;
 let editingType = null;
+let focusModeActive = false;
+
+/* ── ✅ Historial de conversación IA en sesión ── */
+let aiHistory = [];
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
-    if (!saved) return structuredClone(initialState);
-    /* Migraciones: agregar campos nuevos que no existían */
-    if (!saved.archivedLoans) saved.archivedLoans = [];
-    if (!saved.prevMonthRevenue) saved.prevMonthRevenue = [28000,40000,46000,34000,60000,65000];
-    if (!saved.notifSettings) saved.notifSettings = { loanOverdueDays: 3, lowStockDefault: 3 };
-    if (saved.onboardingDone === undefined) saved.onboardingDone = true; /* usuarios existentes no ven onboarding */
-    saved.vaperInventory = saved.vaperInventory.map(p => ({ minStock: 3, ...p }));
-    saved.barberClients = saved.barberClients.map(c => ({ cutNotes: "", ...c }));
-    saved.barberAppointments = saved.barberAppointments.map(a => ({ employeeId: "", ...a }));
-    return saved;
+    /* Migrar desde V4 */
+    const oldV4 = !saved ? null : saved;
+    const oldV4Key = JSON.parse(localStorage.getItem("CEDANO_V4") || "null");
+    const base = saved || oldV4Key || structuredClone(initialState);
+
+    if (!base.archivedLoans) base.archivedLoans = [];
+    if (!base.prevMonthRevenue) base.prevMonthRevenue = [28000,40000,46000,34000,60000,65000];
+    if (!base.notifSettings) base.notifSettings = { loanOverdueDays: 3, lowStockDefault: 3 };
+    if (base.onboardingDone === undefined) base.onboardingDone = true;
+    if (!base.quickNotes) base.quickNotes = [];
+    if (!base.lastOpenDate) base.lastOpenDate = "";
+    if (!base.lastBackupDate) base.lastBackupDate = "";
+    if (base.focusMode === undefined) base.focusMode = false;
+
+    /* ✅ Migrar hábitos: agregar lastDone si no existe */
+    base.habits = base.habits.map(h => ({ lastDone: "", ...h }));
+    /* ✅ Migrar tareas: agregar completedAt si no existe */
+    base.tasks = base.tasks.map(t => ({ completedAt: "", ...t }));
+    base.vaperInventory = base.vaperInventory.map(p => ({ minStock: 3, ...p }));
+    base.barberClients = base.barberClients.map(c => ({ cutNotes: "", ...c }));
+    base.barberAppointments = base.barberAppointments.map(a => ({ employeeId: "", ...a }));
+    return base;
   } catch { return structuredClone(initialState); }
 }
+
 function saveState() { localStorage.setItem(KEY, JSON.stringify(state)); }
 function setState(patch) { state = { ...state, ...patch }; saveState(); render(); }
 
-/* ── Cálculos base ── */
+/* =====================================================================
+   ✅ RESET AUTOMÁTICO DIARIO
+   ===================================================================== */
+function checkDayReset() {
+  const todayStr = today();
+  if (state.lastOpenDate === todayStr) return; /* Ya se abrió hoy */
+
+  /* Si hay datos de ayer, guardar en historial antes de limpiar */
+  if (state.lastOpenDate && state.lastOpenDate !== todayStr) {
+    const yesterday = {
+      date: state.lastOpenDate,
+      completed: state.tasks.filter(t => t.done).length,
+      pending: state.tasks.filter(t => !t.done).length,
+      mission: state.mission,
+      moneyToday: state.moneyToday,
+      moneySpent: state.moneySpent,
+      productiveHours: state.productiveHours,
+      note: state.dailyNote || "",
+      discipline: Math.round(state.habits.filter(h => h.done).length / Math.max(1, state.habits.length) * 100),
+      status: state.moneyToday >= state.moneyGoal ? "Bueno" : "Regular"
+    };
+    /* ✅ Historial de 90 días */
+    state.history = [yesterday, ...state.history.filter(h => h.date !== yesterday.date)].slice(0, 90);
+    /* Agregar a gráfica diaria */
+    state.dailyRevenue = [...state.dailyRevenue.slice(1), state.moneyToday];
+  }
+
+  /* Reset campos del día */
+  state.moneyToday = 0;
+  state.moneySpent = 0;
+  state.productiveHours = 0;
+  state.dailyNote = "";
+
+  /* ✅ Reset hábitos con lógica de racha real */
+  const todayDate = new Date(todayStr);
+  state.habits = state.habits.map(h => {
+    let newStreak = h.streak;
+    if (h.done && h.lastDone) {
+      const lastDate = new Date(h.lastDone);
+      const diffDays = Math.round((todayDate - lastDate) / (1000*60*60*24));
+      if (diffDays > 1) newStreak = 0; /* Rompió la racha */
+    } else if (!h.done) {
+      newStreak = Math.max(0, h.streak - 1); /* No lo hizo ayer */
+    }
+    return { ...h, done: false, streak: newStreak };
+  });
+
+  /* Reset tareas diarias completadas */
+  state.tasks = state.tasks.map(t => ({
+    ...t,
+    done: t.type !== "Diario" ? t.done : false,
+    completedAt: t.type !== "Diario" ? t.completedAt : ""
+  }));
+
+  state.lastOpenDate = todayStr;
+  saveState();
+}
+
+/* =====================================================================
+   ✅ RECORDATORIO DE BACKUP SEMANAL
+   ===================================================================== */
+function checkBackupReminder() {
+  if (!state.lastBackupDate) return; /* Primera vez, no molestar */
+  const last = new Date(state.lastBackupDate);
+  const now = new Date();
+  const diffDays = Math.round((now - last) / (1000*60*60*24));
+  if (diffDays >= 7) {
+    setTimeout(() => {
+      showToast("📦 Han pasado 7 días — exporta tu backup en Reportes");
+    }, 3000);
+  }
+}
+
+/* =====================================================================
+   ✅ CIERRE NOCTURNO AUTOMÁTICO A LAS 9PM
+   ===================================================================== */
+function checkNightAlert() {
+  const h = new Date().getHours();
+  const alreadyShown = sessionStorage.getItem("CEDANO_NIGHT_SHOWN");
+  if (h >= 21 && !alreadyShown) {
+    sessionStorage.setItem("CEDANO_NIGHT_SHOWN", "1");
+    setTimeout(() => {
+      const banner = document.createElement("div");
+      banner.id = "night-banner";
+      banner.innerHTML = `
+        <div style="position:fixed;top:0;left:0;right:0;z-index:200;background:linear-gradient(135deg,#0b1012,#11171a);
+          border-bottom:2px solid var(--neon);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div>
+            <p style="color:var(--neon);font-weight:900;font-size:15px">🌙 Es hora del cierre nocturno</p>
+            <p style="color:var(--muted);font-size:12px">Registra tu día antes de dormir</p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="small-btn green" onclick="document.getElementById('night-banner').remove();go('Mi Día');setTimeout(openNightSummary,300)">Abrir</button>
+            <button class="small-btn" onclick="document.getElementById('night-banner').remove()">Luego</button>
+          </div>
+        </div>`;
+      document.body.appendChild(banner);
+    }, 1500);
+  }
+}
+
+/* =====================================================================
+   CÁLCULOS BASE
+   ===================================================================== */
 function completedTasks() { return state.tasks.filter(t => t.done).length; }
 function pendingTasks() { return state.tasks.filter(t => !t.done).length; }
 function progress() { return state.moneyGoal ? Math.min(100, Math.round(state.moneyToday / state.moneyGoal * 100)) : 0; }
@@ -198,13 +318,16 @@ function loanBalance(loan) {
   const total = Number(loan.capital) + Number(loan.capital) * Number(loan.interest || 0) / 100;
   return Math.max(0, total - Number(loan.paid || 0));
 }
+/* ✅ Fix: balance en moneda correcta del préstamo */
+function loanBalanceMoney(loan) {
+  return money(loanBalance(loan), loan.currency || "RD$");
+}
 function totalLoanBalance() { return state.loans.reduce((s,l) => s + loanBalance(l), 0); }
 function vaperGain() { return state.vaperSales.reduce((s,sale) => s + Number(sale.gain || 0), 0); }
 function vaperInventoryValue() { return state.vaperInventory.reduce((s,p) => s + Number(p.quantity||0) * Number(p.cost||0), 0); }
 function barberIncome() {
   return state.barberAppointments.filter(a => a.completed === true).reduce((s,a) => s + Number(a.price||0), 0);
 }
-/* ✅ NUEVO: ingresos por empleado */
 function barberIncomeByEmployee(employeeId) {
   return state.barberAppointments
     .filter(a => a.completed && a.employeeId === employeeId)
@@ -216,12 +339,40 @@ function patrimonyTotal() {
 }
 function loanStatusClass(s) { return s==="Al día"?"status-verde":s==="En mora"?"status-mora":"status-riesgo"; }
 function loanStatusDot(s) { return s==="Al día"?"🟢":s==="En mora"?"🔴":"🟡"; }
-
-/* ✅ NUEVO: conteo de notificaciones (mora + stock bajo) */
 function notifCount() {
   const mora = state.loans.filter(l => calcLateDays(l) >= (state.notifSettings?.loanOverdueDays||3) || l.status==="En mora").length;
   const stock = state.vaperInventory.filter(p => Number(p.quantity) <= Number(p.minStock||3)).length;
   return mora + stock;
+}
+
+/* =====================================================================
+   ✅ MORNING BRIEF — Panel inteligente según hora
+   ===================================================================== */
+function getMorningBrief() {
+  const h = new Date().getHours();
+  const cobrosHoy = state.loans.filter(l => {
+    if (!l.dueDate) return false;
+    return l.dueDate === today();
+  });
+  const citasHoy = state.barberAppointments.filter(a => a.date === today() && !a.completed);
+  const mora = state.loans.filter(l => calcLateDays(l) > 0 || l.status === "En mora");
+  const lowStock = state.vaperInventory.filter(p => Number(p.quantity) <= Number(p.minStock||3));
+
+  let greeting = h < 12 ? "Buenos días" : h < 18 ? "Buenas tardes" : "Buenas noches";
+  let focus = h < 12
+    ? "Hora de atacar el día. Revisa tus cobros y hábitos."
+    : h < 17
+    ? "Tarde productiva. ¿Ya completaste tu misión?"
+    : "Últimas horas del día. Cierra fuerte.";
+
+  const items = [];
+  if (mora.length) items.push(`🔴 ${mora.length} cliente${mora.length>1?"s":""} en mora`);
+  if (citasHoy.length) items.push(`✂ ${citasHoy.length} cita${citasHoy.length>1?"s":""} pendiente${citasHoy.length>1?"s":""} hoy`);
+  if (cobrosHoy.length) items.push(`💵 ${cobrosHoy.length} cobro${cobrosHoy.length>1?"s":""} programado${cobrosHoy.length>1?"s":""} hoy`);
+  if (lowStock.length) items.push(`⚠ Stock bajo: ${lowStock.map(p=>p.product).join(", ")}`);
+  if (!items.length) items.push("✅ Todo en orden. Buen día.");
+
+  return { greeting, focus, items };
 }
 
 function generateSchedule(loan) {
@@ -241,7 +392,7 @@ function generateSchedule(loan) {
 }
 
 /* =====================================================================
-   TABS con badge de notificaciones
+   TABS
    ===================================================================== */
 const tabs = [["Inicio","⌂"],["Mi Día","⚑"],["Préstamos","$"],["Vaper","☁"],["Barbería","✂"],["Reportes","▥"],["Imperio","♛"]];
 
@@ -294,11 +445,14 @@ function rebuildDOM() {
   document.body.innerHTML = `
     <main class="app"><section id="screen"></section></main>
     <nav class="tabs" id="tabs" role="navigation" aria-label="Navegación principal"></nav>
-    <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchTitle"><div class="modal-inner"><div class="modal-head"><h2 id="searchTitle">🔍 Búsqueda global</h2><button onclick="closeModal('searchModal')">×</button></div><div id="searchContent"><input id="globalSearchInput" placeholder="Buscar..." oninput="runGlobalSearch(this.value)"/><div id="globalSearchResults" style="margin-top:12px"></div></div></div></div>
-    <div class="modal" id="nightModal" role="dialog" aria-modal="true" aria-labelledby="nightModalTitle"><div class="modal-inner"><div class="modal-head"><h2 id="nightModalTitle">🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div><div id="nightContent"></div></div></div>
-    <div class="modal" id="editModal" role="dialog" aria-modal="true" aria-labelledby="editTitle"><div class="modal-inner"><div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div><div id="editContent"></div></div></div>
-    <div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle"><div class="modal-inner"><div class="modal-head"><h2 id="detailTitle">Detalle</h2><button onclick="closeDetail()">×</button></div><div id="detailContent"></div></div></div>
-    <div class="modal" id="aiModal" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle"><div class="modal-inner"><div class="modal-head"><h2 id="aiModalTitle">🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div><div id="aiContent">
+    <!-- Nota rápida flotante -->
+    <button class="fab-note" onclick="openQuickNote()" aria-label="Nota rápida" title="Nota rápida">✏</button>
+    <div class="modal" id="quickNoteModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2 style="color:var(--neon)">✏ Nota rápida</h2><button onclick="closeModal('quickNoteModal')">×</button></div><div id="quickNoteContent"></div></div></div>
+    <div class="modal" id="searchModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🔍 Búsqueda global</h2><button onclick="closeModal('searchModal')">×</button></div><div id="searchContent"><input id="globalSearchInput" placeholder="Buscar..." oninput="runGlobalSearch(this.value)"/><div id="globalSearchResults" style="margin-top:12px"></div></div></div></div>
+    <div class="modal" id="nightModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div><div id="nightContent"></div></div></div>
+    <div class="modal" id="editModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div><div id="editContent"></div></div></div>
+    <div class="modal" id="detailModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>Detalle</h2><button onclick="closeDetail()">×</button></div><div id="detailContent"></div></div></div>
+    <div class="modal" id="aiModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div><div id="aiContent">
       <input id="aiInput" placeholder="Ej: ¿Cuánto gané esta semana?" aria-label="Pregunta para la IA"/>
       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px">
         <button class="small-btn green" onclick="askAI('¿Cuánto gané esta semana?')">Esta semana</button>
@@ -307,16 +461,18 @@ function rebuildDOM() {
         <button class="small-btn warn" onclick="askAI('¿Cuánto debo producir hoy para llegar a mi meta mensual?')">Meta mensual</button>
         <button class="small-btn" onclick="askAI('Resumen de patrimonio total')">Patrimonio</button>
         <button class="small-btn blue" onclick="askAI('Dame consejos para crecer mis préstamos')">Consejos</button>
+        <button class="small-btn" onclick="askAI('¿Qué productos vaper debo reponer?')">Reponer stock</button>
+        <button class="small-btn red" onclick="clearAIHistory()">🗑 Limpiar chat</button>
       </div>
       <button class="btn" style="margin-top:10px" onclick="runAI()">Preguntar ›</button>
-      <div id="aiResponse" class="summary-box" style="margin-top:12px;display:none" aria-live="polite" aria-atomic="true"></div>
+      <div id="aiChatHistory" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
     </div></div></div>
     <div class="modal" id="payHistModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>💳 Historial de pagos</h2><button onclick="closeModal('payHistModal')">×</button></div><div id="payHistContent"></div></div></div>
-    <div class="modal" id="onboardModal" role="dialog" aria-modal="true" style="z-index:60"><div class="modal-inner"><div class="modal-head"><h2>👋 Bienvenido</h2><button onclick="closeOnboard()">×</button></div><div id="onboardContent"></div></div></div>`;
+    <div class="modal" id="onboardModal" role="dialog" aria-modal="true" style="z-index:60"><div class="modal-inner"><div class="modal-head"><h2>👋 Bienvenido a Cedano Business</h2><button onclick="closeOnboard()">×</button></div><div id="onboardContent"></div></div></div>`;
 }
 
 /* =====================================================================
-   FOCO EN MODALES
+   MODALES
    ===================================================================== */
 function trapFocus(modalEl) {
   const focusable = modalEl.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])');
@@ -343,20 +499,64 @@ function closeModal(id) {
 }
 
 /* =====================================================================
-   ONBOARDING ✅ NUEVO
+   ✅ NOTAS RÁPIDAS FLOTANTES
+   ===================================================================== */
+function openQuickNote() {
+  const el = document.getElementById("quickNoteContent");
+  if (!el) return;
+  el.innerHTML = `
+    <textarea id="quickNoteText" placeholder="Escribe tu nota aquí..." style="min-height:120px"></textarea>
+    ${btn("Guardar nota","saveQuickNote()")}
+    ${state.quickNotes.length ? `
+      <h3 style="margin-top:14px;color:var(--neon);font-size:14px">Notas guardadas</h3>
+      <div style="max-height:220px;overflow-y:auto">
+        ${state.quickNotes.slice().reverse().map(n => `
+          <div class="list-item" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div>
+              <p style="font-size:14px;line-height:1.5">${esc(n.text)}</p>
+              <p class="muted" style="font-size:11px">${esc(n.date)} ${esc(n.time)}</p>
+            </div>
+            ${sm("🗑","deleteQuickNote('"+n.id+"')","red")}
+          </div>`).join("")}
+      </div>` : ""}`;
+  openModal("quickNoteModal");
+  setTimeout(()=>document.getElementById("quickNoteText")?.focus(), 80);
+}
+
+function saveQuickNote() {
+  const text = document.getElementById("quickNoteText")?.value.trim();
+  if (!text) return;
+  const now = new Date();
+  state.quickNotes.push({
+    id: uid(), text,
+    date: today(),
+    time: now.toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"})
+  });
+  saveState();
+  closeModal("quickNoteModal");
+  showToast("✅ Nota guardada");
+}
+
+function deleteQuickNote(id) {
+  state.quickNotes = state.quickNotes.filter(n => n.id !== id);
+  saveState();
+  openQuickNote();
+}
+
+/* =====================================================================
+   ONBOARDING
    ===================================================================== */
 const onboardSteps = [
   { icon:"💰", title:"Módulo Préstamos", desc:"Registra clientes, crea préstamos con tabla de cuotas automática y cobra por WhatsApp con un toque." },
   { icon:"☁", title:"Módulo Vaper", desc:"Controla tu inventario, registra ventas y recibe alertas cuando el stock está bajo." },
   { icon:"✂", title:"Módulo Barbería", desc:"Agenda citas, gestiona clientes frecuentes y registra ingresos al marcar citas como completadas." },
   { icon:"▥", title:"Reportes", desc:"Ve tus ganancias en gráficas, compara con el mes anterior y exporta reportes en CSV o PDF." },
-  { icon:"🧠", title:"IA Cedano", desc:"Presiona el ícono 🧠 en cualquier pantalla para preguntarle a la IA sobre tu negocio en tiempo real." }
+  { icon:"🧠", title:"IA Cedano", desc:"Presiona el ícono 🧠 en cualquier pantalla para preguntarle a la IA sobre tu negocio. Ahora recuerda la conversación." },
+  { icon:"✏", title:"Notas rápidas", desc:"El botón flotante ✏ en la esquina te deja anotar cualquier cosa al instante desde cualquier pantalla." }
 ];
 let onboardStep = 0;
 
-function openOnboard() {
-  onboardStep = 0; renderOnboardStep(); openModal("onboardModal");
-}
+function openOnboard() { onboardStep = 0; renderOnboardStep(); openModal("onboardModal"); }
 function renderOnboardStep() {
   const s = onboardSteps[onboardStep];
   const el = document.getElementById("onboardContent"); if (!el) return;
@@ -376,12 +576,10 @@ function renderOnboardStep() {
 }
 function nextOnboard() { onboardStep++; renderOnboardStep(); }
 function prevOnboard() { onboardStep--; renderOnboardStep(); }
-function closeOnboard() {
-  state.onboardingDone = true; saveState(); closeModal("onboardModal");
-}
+function closeOnboard() { state.onboardingDone = true; saveState(); closeModal("onboardModal"); }
 
 /* =====================================================================
-   BÚSQUEDA GLOBAL ✅ NUEVO
+   BÚSQUEDA GLOBAL
    ===================================================================== */
 function openSearch() { openModal("searchModal"); setTimeout(()=>document.getElementById("globalSearchInput")?.focus(), 80); }
 
@@ -393,36 +591,25 @@ function runGlobalSearch(q) {
 
   state.loanClients.filter(c => c.name.toLowerCase().includes(ql) || (c.phone||"").includes(ql))
     .forEach(c => results.push({ type:"👤 Cliente préstamo", title:c.name, sub:c.phone, action:`go('Préstamos')` }));
-
   state.loans.filter(l => l.client.toLowerCase().includes(ql))
-    .forEach(l => results.push({ type:"💵 Préstamo", title:l.client, sub:`Balance: ${money(loanBalance(l))} · ${l.status}`, action:`go('Préstamos')` }));
-
+    .forEach(l => results.push({ type:"💵 Préstamo", title:l.client, sub:`Balance: ${loanBalanceMoney(l)} · ${l.status}`, action:`go('Préstamos')` }));
   state.contacts.filter(c => c.name.toLowerCase().includes(ql) || (c.phone||"").includes(ql))
     .forEach(c => results.push({ type:"📇 Contacto", title:c.name, sub:`${c.phone} · ${c.status}`, action:`go('Préstamos')` }));
-
   state.barberAppointments.filter(a => a.client.toLowerCase().includes(ql))
     .forEach(a => results.push({ type:"✂ Cita barbería", title:a.client, sub:`${a.date} ${a.time} · ${a.service}`, action:`go('Barbería')` }));
-
   state.barberClients.filter(c => c.name.toLowerCase().includes(ql))
     .forEach(c => results.push({ type:"💈 Cliente barbería", title:c.name, sub:c.phone, action:`go('Barbería')` }));
-
   state.vaperInventory.filter(p => p.product.toLowerCase().includes(ql) || p.flavor.toLowerCase().includes(ql))
     .forEach(p => results.push({ type:"☁ Producto vaper", title:p.product, sub:`Stock: ${p.quantity} · ${money(p.price)}`, action:`go('Vaper')` }));
+  state.quickNotes.filter(n => n.text.toLowerCase().includes(ql))
+    .forEach(n => results.push({ type:"✏ Nota", title:n.text.slice(0,50), sub:n.date, action:`openQuickNote()` }));
 
-  state.vaperClients.filter(c => c.name.toLowerCase().includes(ql))
-    .forEach(c => results.push({ type:"☁ Cliente vaper", title:c.name, sub:c.phone, action:`go('Vaper')` }));
-
-  if (!results.length) {
-    el.innerHTML = `<div class="empty">Sin resultados para "${esc(q)}"</div>`;
-    return;
-  }
+  if (!results.length) { el.innerHTML = `<div class="empty">Sin resultados para "${esc(q)}"</div>`; return; }
   el.innerHTML = results.slice(0,12).map(r => `
     <div class="list-item" onclick="closeModal('searchModal');${r.action}" style="cursor:pointer">
-      <div>
-        <span class="pill" style="margin-bottom:4px">${r.type}</span>
-        <div style="font-weight:700">${esc(r.title)}</div>
-        <div class="muted" style="font-size:12px">${esc(r.sub)}</div>
-      </div>
+      <span class="pill" style="margin-bottom:4px">${r.type}</span>
+      <div style="font-weight:700">${esc(r.title)}</div>
+      <div class="muted" style="font-size:12px">${esc(r.sub)}</div>
     </div>`).join("");
 }
 
@@ -433,6 +620,14 @@ function render() {
   if (state.pinEnabled && !pinUnlocked) { document.body.innerHTML = renderPin(); return; }
   if (!document.getElementById("screen")) rebuildDOM();
   hideSkeleton(); destroyCharts(); renderTabs();
+
+  /* ✅ Modo enfoque */
+  if (focusModeActive) {
+    document.getElementById("screen").innerHTML = renderFocusMode();
+    document.body.classList.toggle("light-mode", !darkMode);
+    return;
+  }
+
   const views = {
     "Inicio":renderHome,"Mi Día":renderMyDay,"Préstamos":renderLoans,
     "Vaper":renderVaper,"Barbería":renderBarber,"Reportes":renderReports,"Imperio":renderImperio
@@ -442,9 +637,62 @@ function render() {
   if (bar) bar.style.width = progress()+"%";
   document.body.classList.toggle("light-mode",!darkMode);
   setTimeout(initCharts,100);
-
-  /* Mostrar onboarding si es la primera vez */
   if (!state.onboardingDone) setTimeout(openOnboard, 600);
+  checkNightAlert();
+}
+
+/* =====================================================================
+   ✅ MODO ENFOQUE
+   ===================================================================== */
+function toggleFocusMode() {
+  focusModeActive = !focusModeActive;
+  render();
+}
+
+function renderFocusMode() {
+  const pendientes = state.tasks.filter(t => !t.done);
+  const habitos = state.habits.filter(h => !h.done);
+  return `
+    <div style="padding:10px 0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <h1 style="color:var(--neon);font-size:26px;font-weight:900">⚡ Modo Enfoque</h1>
+          <p class="muted" style="font-size:13px">Solo lo que importa ahora mismo</p>
+        </div>
+        <button class="small-btn warn" onclick="toggleFocusMode()">✕ Salir</button>
+      </div>
+
+      <div class="card" style="border-color:rgba(34,212,104,.6);margin-bottom:16px">
+        <h3 class="title">🎯 Misión del día</h3>
+        <p style="font-size:18px;font-weight:700;color:var(--text)">${esc(state.mission||"Sin misión. Ve a Inicio y define una.")}</p>
+        <div class="progress" style="margin-top:12px"><span id="moneyProgress" style="width:${progress()}%"></span></div>
+        <p class="muted" style="font-size:13px;margin-top:6px">${money(state.moneyToday)} / ${money(state.moneyGoal)} — ${progress()}%</p>
+      </div>
+
+      ${pendientes.length ? `
+      <div class="card" style="margin-bottom:16px">
+        <h3 class="title">✅ Tareas pendientes (${pendientes.length})</h3>
+        ${pendientes.map(t => `
+          <div class="habit-item" onclick="toggleTask('${t.id}')" role="checkbox" aria-checked="false" tabindex="0">
+            <div class="habit-check"></div>
+            <div>
+              <span style="font-weight:700">${esc(t.text)}</span>
+              <span class="pill ${t.priority==="Urgente"?"danger":t.priority==="Alta"?"warn":"green"}" style="margin-left:8px">${t.priority}</span>
+            </div>
+          </div>`).join("")}
+      </div>` : `<div class="card" style="text-align:center;padding:20px;margin-bottom:16px"><p style="color:var(--neon);font-size:18px;font-weight:900">✅ Sin tareas pendientes</p></div>`}
+
+      ${habitos.length ? `
+      <div class="card">
+        <h3 class="title">🌅 Hábitos pendientes (${habitos.length})</h3>
+        ${habitos.map(h => `
+          <div class="habit-item" onclick="toggleHabit('${h.id}')" role="checkbox" aria-checked="false" tabindex="0">
+            <div class="habit-check"></div>
+            <span>${esc(h.text)}</span>
+            <span class="pill green" style="margin-left:auto">${h.streak}🔥</span>
+          </div>`).join("")}
+      </div>` : `<div class="card" style="text-align:center;padding:20px"><p style="color:var(--neon);font-size:18px;font-weight:900">🔥 Todos los hábitos completados</p></div>`}
+    </div>`;
 }
 
 function header() {
@@ -461,29 +709,39 @@ function header() {
 function toggleTheme() {
   darkMode = !darkMode; localStorage.setItem("CEDANO_THEME",darkMode?"dark":"light");
   document.body.classList.toggle("light-mode",!darkMode);
-  const b = document.querySelector(".topbar .icon-btn:nth-child(3)");
-  if (b) b.textContent = darkMode?"☀":"🌙";
 }
 
 /* =====================================================================
-   HOME
+   HOME con Morning Brief
    ===================================================================== */
 function renderHome() {
+  const brief = getMorningBrief();
   const missing = Math.max(0, state.moneyGoal - state.moneyToday);
   const mora = state.loans.filter(l => calcLateDays(l)>0 || l.status==="En mora").length;
   const pendingC = state.contacts.filter(c => c.status==="Pendiente").length;
   const taskPct = state.tasks.length ? Math.round(completedTasks()/state.tasks.length*100) : 0;
   const todayCitas = state.barberAppointments.filter(a => a.date===today()).length;
   const lowStockItems = state.vaperInventory.filter(p => Number(p.quantity) <= Number(p.minStock||3));
-  const moraLoans = state.loans.filter(l => calcLateDays(l)>0 || l.status==="En mora");
   const overdueAlert = state.loans.filter(l => calcLateDays(l) >= (state.notifSettings?.loanOverdueDays||3));
   const d = new Date(); const hLeft = Math.max(0, 22-d.getHours());
+
   return `
     ${header()}
-    <div class="hero-title"><div class="logo-mark">$</div><div><h1>CEDANO</h1><p>DISCIPLINA • NEGOCIOS • PRODUCTIVIDAD</p></div></div>
-    <p class="hello">Buen día, <strong>${esc(state.userName)}</strong> 👋</p>
-    <p class="sub">Enfocado hoy, imparable siempre.</p>
-    <div class="clock" id="clock">${d.toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"})}</div>
+
+    <!-- ✅ Morning Brief -->
+    <div class="morning-brief">
+      <div class="brief-header">
+        <div>
+          <h2 class="brief-greeting">${brief.greeting}, <span style="color:var(--neon)">${esc(state.userName)}</span> 👋</h2>
+          <p class="brief-focus">${brief.focus}</p>
+        </div>
+        <button class="focus-mode-btn" onclick="toggleFocusMode()" title="Modo Enfoque">⚡</button>
+      </div>
+      <div class="brief-items">
+        ${brief.items.map(item => `<div class="brief-item">${item}</div>`).join("")}
+      </div>
+    </div>
+
     <section class="card capital"><div><p class="label">Capital en efectivo</p><p class="big-money">${money(state.capital)}</p></div><span class="muted">›</span></section>
     <h2 class="section-title">📊 Panel de Hoy</h2>
     <section class="grid-3">
@@ -491,11 +749,12 @@ function renderHome() {
       ${metric("📅","Citas barbería",todayCitas,"Hoy")}
       ${metric("⏰","Tiempo libre",hLeft+"h","Estimado")}
     </section>
+
     ${lowStockItems.length?`<div class="card alert-card warn-card">
       <p class="title" style="color:var(--warn)">⚠ Stock bajo — reponer pronto</p>
       ${lowStockItems.map(p=>`<p class="pill warn">☁ ${esc(p.product)} — ${p.quantity}/${p.minStock} uds.</p>`).join("")}
-      <small class="muted">Toca Vaper para agregar stock</small>
     </div>`:""}
+
     ${overdueAlert.length?`<div class="card alert-card danger-card">
       <p class="title" style="color:var(--danger)">🔴 Cobros urgentes (≥${state.notifSettings?.loanOverdueDays||3} días)</p>
       ${overdueAlert.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:8px 0">
@@ -503,16 +762,23 @@ function renderHome() {
         <button class="small-btn green" onclick="whatsappLoan('${l.id}')">WA</button>
       </div>`).join("")}
     </div>`:""}
+
     ${card("🎯 Misión del día",`<p>${esc(state.mission||"Sin misión establecida")}</p>${inp("missionInput","Ej: Conseguir 3 clientes")}<div class="row" style="margin-top:8px">${btn("Guardar","saveMission()")}${btn("✔ Completar (+50 XP)","completeMission()","secondary")}</div>`)}
+
     ${card("💰 Meta diaria",`<p class="big-money">${money(state.moneyGoal)}</p><p>Generado: ${money(state.moneyToday)}</p><div class="progress"><span id="moneyProgress"></span></div><p class="green">${progress()}% completado — faltan ${money(missing)}</p>${inp("goalInput","Meta RD$","number")}${inp("todayMoneyInput","Dinero generado hoy","number")}${btn("Guardar","saveMoney()")}`)}
+
     <section class="grid">
       ${metric("⚔","XP",state.xp,"Puntos")}${metric("🏆","Rango",rank(),"Sigue avanzando")}
       ${metric("🎯","Pendientes",pendingTasks(),"Tareas")}${metric("📌","Seguimientos",state.contacts.length,"Activos")}
     </section>
+
     ${card("📖 Verso del Día",`<p><em>Porque yo sé los planes que tengo para vosotros.</em></p><p class="green">Jeremías 29:11</p>`)}
+
     <h2 class="section-title">Módulos</h2>
     ${["💰,Préstamos,Clientes préstamos y cobros.,Préstamos","☁,Vaper,Inventario y ventas.,Vaper","✂,Barbería,Agenda y clientes.,Barbería","▥,Reportes,Ganancias y estado general.,Reportes","⚑,Productividad,Metas hábitos y XP.,Mi Día","♛,Mi Imperio,Patrimonio y crecimiento.,Imperio"].map(s=>{const[ic,nm,dc,tb]=s.split(",");return`<div class="module" onclick="go('${tb}')"><div class="module-icon">${ic}</div><div><strong>${nm}</strong><small>${dc}</small></div><div class="arrow">›</div></div>`;}).join("")}
+
     ${card("🧠 Resumen IA",`<p class="pill green">Faltan ${money(missing)} para cumplir tu meta.</p><p class="pill ${mora?"danger":"green"}">${mora} clientes en mora.</p><p class="pill warn">${pendingC} personas pendientes por contactar.</p><p class="pill green">Completaste el ${taskPct}% de tus tareas.</p><p class="pill">Balance en préstamos: ${money(totalLoanBalance())}</p><p class="pill blue">Patrimonio total: ${money(patrimonyTotal())}</p>${btn("Abrir IA completa","openAI()","secondary")}`)}
+
     <h2 class="section-title">Accesos rápidos</h2>
     <section class="quick-grid">
       ${[["👥","Clientes","Préstamos"],["☁","Vaper","Vaper"],["✂","Barbería","Barbería"],["▥","Reportes","Reportes"],["⚑","Metas","Mi Día"],["$","Finanzas","Reportes"],["📅","Agenda","Mi Día"],["♛","Imperio","Imperio"]].map(([ic,nm,tb])=>`<button class="quick" onclick="go('${tb}')"><span>${ic}</span><small>${nm}</small></button>`).join("")}
@@ -523,32 +789,40 @@ function renderHome() {
    MI DÍA
    ===================================================================== */
 function renderMyDay() {
+  const habitsCompleted = state.habits.filter(h=>h.done).length;
+  const disciplineToday = Math.round(habitsCompleted/Math.max(1,state.habits.length)*100);
   return `
     <h1 class="section-title">⚑ Mi Día</h1>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <p class="muted" style="font-size:13px">Disciplina hoy: <strong style="color:var(--neon)">${disciplineToday}%</strong></p>
+      <button class="small-btn green" onclick="toggleFocusMode()">⚡ Modo Enfoque</button>
+    </div>
+
     ${card("🌅 Hábitos de hoy", state.habits.map(h=>`
       <div class="habit-item ${h.done?"done":""}" onclick="toggleHabit('${h.id}')" role="checkbox" aria-checked="${h.done}" tabindex="0">
         <div class="habit-check">${h.done?"✓":""}</div>
-        <span>${esc(h.text)}</span>
+        <div style="flex:1">
+          <span>${esc(h.text)}</span>
+          ${h.lastDone?`<p class="muted" style="font-size:11px">Última vez: ${esc(h.lastDone)}</p>`:""}
+        </div>
         <span class="pill green" style="margin-left:auto">${h.streak}🔥</span>
         ${sm("🗑","deleteHabit('"+h.id+"')","red")}
       </div>`).join("")+inp("newHabitInput","Agregar hábito")+btn("Agregar hábito","addHabit()"))}
+
     ${card("📊 Estadísticas personales",`
       <div class="grid-3">
         <div class="card metric"><div class="title">🏋 Gym</div><div class="value">${state.habitStats.daysTraining}</div><div class="muted">días seguidos</div></div>
         <div class="card metric"><div class="title">🎯 Metas</div><div class="value">${state.habitStats.daysMeta}</div><div class="muted">días cumplidos</div></div>
         <div class="card metric"><div class="title">😴 Sueño</div><div class="value">${state.habitStats.avgSleep}h</div><div class="muted">promedio</div></div>
-      </div>
-      <div style="margin-top:12px"><p class="label">Racha semanal</p>
-        <div style="display:flex;gap:6px;margin-top:6px">
-          ${["L","M","M","J","V","S","D"].map((d,i)=>`<div style="text-align:center"><div class="streak-box${i<5?" hit":""}"></div><small style="color:var(--muted);font-size:10px">${d}</small></div>`).join("")}
-        </div>
       </div>`)}
+
     ${card("✅ Tareas del día",`
       ${inp("taskText","Ej: Cobrar a Pedro")}
       <div class="row">${sel("taskType",["Diario","Semanal","Mensual"],"Diario")}${sel("taskPriority",["Baja","Media","Alta","Urgente"],"Media")}</div>
       <div class="row">${inp("taskDate","Fecha")}${inp("taskTime","Hora")}</div>
       ${btn("Agregar tarea","addTask()")}
       <div style="margin-top:12px">${state.tasks.length?state.tasks.map(taskHTML).join(""):`<div class="empty">No hay tareas.</div>`}</div>`)}
+
     ${card("📅 Planificar Mañana",`
       ${inp("tomorrowMission","Misión principal mañana","text",state.tomorrow.mission)}
       ${inp("tomorrowGoal","Meta de dinero mañana","number",state.tomorrow.moneyGoal)}
@@ -568,7 +842,7 @@ function taskHTML(task) {
   return `<div class="list-item task ${task.done?"done":""}">
     <div onclick="toggleTask('${task.id}')" style="flex:1;cursor:pointer" role="checkbox" aria-checked="${task.done}" tabindex="0">
       <div class="task-text">${task.done?"☑":"☐"} ${esc(task.text)}</div>
-      <small class="muted">${task.type||"Diario"} • ${task.date||"Sin fecha"} • ${task.time||"Sin hora"}</small>
+      <small class="muted">${task.type||"Diario"} • ${task.date||"Sin fecha"} • ${task.time||"Sin hora"}${task.completedAt?" • ✅ "+task.completedAt:""}</small>
     </div>
     <span class="pill ${task.priority==="Urgente"?"danger":task.priority==="Alta"?"warn":"green"}">${task.priority}</span>
     ${sm("✏","openEdit('task','"+task.id+"')","")}
@@ -645,35 +919,27 @@ function renderLoans() {
       <h2 class="section-title">📁 Préstamos archivados</h2>
       ${state.archivedLoans.map(l=>`<article class="card" style="opacity:.65">
         <h3 class="title">✅ ${esc(l.client)} <span class="pill green">Cancelado</span></h3>
-        <p>Capital: ${money(l.capital)} | Interés: ${l.interest}% | Cobrado: ${money(l.paid)}</p>
+        <p>Capital: ${money(l.capital,l.currency)} | Interés: ${l.interest}% | Cobrado: ${money(l.paid,l.currency)}</p>
         <p class="muted">Archivado el ${esc(l.archivedDate||"")}</p>
         ${sm("🗑 Eliminar","deleteArchivedLoan('"+l.id+"')","red")}
       </article>`).join("")}`:""}`;
 }
 
-/* ✅ NUEVO: historial de pagos filtrable */
-function openPayHistory() {
-  renderPayHistory(""); openModal("payHistModal");
-}
+function openPayHistory() { renderPayHistory(""); openModal("payHistModal"); }
 function renderPayHistory(filter) {
   const el = document.getElementById("payHistContent"); if (!el) return;
-  const filtered = filter
-    ? state.payments.filter(p => p.client.toLowerCase().includes(filter.toLowerCase()))
-    : state.payments;
+  const filtered = filter ? state.payments.filter(p => p.client.toLowerCase().includes(filter.toLowerCase())) : state.payments;
   const total = filtered.reduce((s,p) => s+Number(p.amount||0), 0);
   el.innerHTML = `
     ${inp("payHistFilter","Filtrar por cliente","text",filter)}
     ${btn("Filtrar","renderPayHistory(document.getElementById('payHistFilter').value)","secondary")}
-    <p style="margin-top:10px"><strong>Total mostrado: ${money(total)}</strong> (${filtered.length} pagos)</p>
+    <p style="margin-top:10px"><strong>Total: ${money(total)}</strong> (${filtered.length} pagos)</p>
     ${filtered.length?filtered.slice().reverse().map(p=>`
       <div class="list-item" style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <strong>${esc(p.client)}</strong>
-          <p class="muted" style="font-size:12px">${esc(p.date)}</p>
-        </div>
+        <div><strong>${esc(p.client)}</strong><p class="muted" style="font-size:12px">${esc(p.date)}</p></div>
         <span class="pill green">${money(p.amount)}</span>
       </div>`).join(""):
-      `<div class="empty">Sin pagos registrados${filter?" para este filtro":""}</div>`}`;
+      `<div class="empty">Sin pagos registrados</div>`}`;
 }
 
 let loanCurrency = "RD$";
@@ -684,16 +950,12 @@ function setCurrency(cur) {
   const row = document.getElementById("usdRateRow");
   if (row) row.style.display = cur==="USD"?"block":"none";
 }
-/* ✅ NUEVO: actualizar tasa USD en vivo */
 function updateUsdRate() {
-  const val = Number(document.getElementById("usdRateLive")?.value||0);
-  if (!val) return;
+  const val = Number(document.getElementById("usdRateLive")?.value||0); if (!val) return;
   state.usdRate = val; saveState();
-  const disp = document.getElementById("rateDisplay");
-  if (disp) disp.textContent = val;
+  const disp = document.getElementById("rateDisplay"); if (disp) disp.textContent = val;
   showToast(`✅ Tasa actualizada: RD$${val}/USD`);
 }
-
 function filterLoans() {
   const q = (document.getElementById("loanSearch")?.value||"").toLowerCase();
   const cl = document.getElementById("clientList"); const ll = document.getElementById("loanList"); const co = document.getElementById("contactList");
@@ -709,14 +971,12 @@ function calcLoan() {
   if (!capital) return;
   const total = capital*(1+interest/100); const cuota = total/periods; const ganancia = total-capital;
   const el = document.getElementById("calcResult");
-  if (el) {
-    el.style.display="block"; el.innerHTML=`
+  if (el) { el.style.display="block"; el.innerHTML=`
     <p>💵 Capital: <strong>${money(capital)}</strong></p>
     <p>💰 Total a cobrar: <strong>${money(total)}</strong></p>
     <p class="green">📈 Ganancia: <strong>${money(ganancia)}</strong></p>
     <p>📅 Cuota ${freq.toLowerCase()}: <strong>${money(cuota)}</strong></p>
-    <p class="muted">En ${periods} períodos</p>`;
-  }
+    <p class="muted">En ${periods} períodos</p>`; }
 }
 
 function clientHTML(c) {
@@ -726,8 +986,7 @@ function clientHTML(c) {
     <p>Cédula: ${esc(c.cedula)} | Tel: ${esc(c.phone)}</p>
     <p>Dirección: ${esc(c.address)} | Ref: ${esc(c.reference)}</p>
     <p class="muted">${esc(c.notes)}</p>
-    <p class="muted">Última visita: ${esc(c.lastVisit||"N/A")}</p>
-    ${clientLoans.map(l=>`<div style="margin-top:8px"><span class="status-badge ${loanStatusClass(l.status)}">${loanStatusDot(l.status)} ${l.status}</span> <span class="muted">Balance: ${money(loanBalance(l))}</span></div>`).join("")}
+    ${clientLoans.map(l=>`<div style="margin-top:8px"><span class="status-badge ${loanStatusClass(l.status)}">${loanStatusDot(l.status)} ${l.status}</span> <span class="muted">Balance: ${loanBalanceMoney(l)}</span></div>`).join("")}
     <div class="row" style="margin-top:10px">
       ${sm("✏ Editar","openEdit('loanClient','"+c.id+"')","")}
       ${sm("🗑 Eliminar","deleteRecord('loanClient','"+c.id+"')","red")}
@@ -744,12 +1003,28 @@ function contactHTML(c) {
     <div class="row" style="margin-top:10px">
       ${sm("📞 Llamar","callContact('"+c.id+"')","")}
       ${sm("💬 WhatsApp","whatsappCobro('"+c.id+"')","")}
-      ${sm("✔ Convertido","setContactStatus('"+c.id+"','Convertido')","green")}
+      <!-- ✅ Convertir contacto a cliente de préstamo en un clic -->
+      ${c.status!=="Convertido"?sm("➕ Crear cliente","convertContact('"+c.id+"')","green"):""}
       ${sm("🗑","deleteContact('"+c.id+"')","red")}
     </div>
     ${sel("status-"+c.id,["Pendiente","Llamado","Visitado","Interesado","No interesado","Convertido"],c.status)}
     ${btn("Cambiar estado","updateContactStatus('"+c.id+"')","")}
   </article>`;
+}
+
+/* ✅ Convertir contacto a cliente de préstamo automáticamente */
+function convertContact(id) {
+  const c = state.contacts.find(x=>x.id===id); if (!c) return;
+  const exists = state.loanClients.find(l=>l.name.toLowerCase()===c.name.toLowerCase());
+  if (exists) { showToast("Este contacto ya es cliente de préstamo"); return; }
+  state.loanClients.push({
+    id: uid(), name: c.name, photo: "", cedula: "",
+    phone: c.phone||"", address: c.address||"",
+    reference: c.source||"", notes: c.note||"", lastVisit: today()
+  });
+  state.contacts = state.contacts.map(x=>x.id===id?{...x,status:"Convertido"}:x);
+  saveState(); render();
+  showToast(`✅ ${c.name} añadido como cliente de préstamos`);
 }
 
 function loanHTML(loan) {
@@ -759,7 +1034,7 @@ function loanHTML(loan) {
   const scheduleHTML = `<div style="overflow-x:auto;margin-top:10px">
     <table class="schedule-table">
       <thead><tr><th>#</th><th>Fecha</th><th>Cuota</th><th>Estado</th></tr></thead>
-      <tbody>${schedule.slice(0,8).map(r=>`<tr class="${r.paid?"paid-row":""}"><td>${r.n}</td><td>${r.date}</td><td>${money(r.amount)}</td><td>${r.paid?"✅":"⏳"}</td></tr>`).join("")}</tbody>
+      <tbody>${schedule.slice(0,8).map(r=>`<tr class="${r.paid?"paid-row":""}"><td>${r.n}</td><td>${r.date}</td><td>${money(r.amount,loan.currency)}</td><td>${r.paid?"✅":"⏳"}</td></tr>`).join("")}</tbody>
     </table>
     ${schedule.length>8?`<p class="muted" style="font-size:12px;margin-top:6px">Mostrando 8 de ${schedule.length} cuotas</p>`:""}
   </div>`;
@@ -768,11 +1043,11 @@ function loanHTML(loan) {
       <h3 class="title" style="margin:0">💵 ${esc(loan.client)}</h3>
       <span class="status-badge ${loanStatusClass(loan.status)}">${loanStatusDot(loan.status)} ${esc(effectiveStatus)}</span>
     </div>
-    <p>Capital: ${money(loan.capital,loan.currency==="USD"?"USD":"")} | Interés: ${loan.interest}%</p>
+    <p>Capital: ${money(loan.capital,loan.currency)} | Interés: ${loan.interest}%</p>
     <p>Inicio: ${esc(loan.startDate||"Sin fecha")} | Vence: ${esc(loan.dueDate||"Sin fecha")}</p>
     <p>Frecuencia: ${loan.frequency} | Días de atraso: <span class="pill ${lateDays>5?"danger":"warn"}">${lateDays}</span></p>
-    <p>Pagado: ${money(loan.paid)}</p>
-    <p class="green" style="font-size:18px;font-weight:900">Balance: ${money(loanBalance(loan))}</p>
+    <p>Pagado: ${money(loan.paid,loan.currency)}</p>
+    <p class="green" style="font-size:18px;font-weight:900">Balance: ${loanBalanceMoney(loan)}</p>
     <details style="margin-top:10px">
       <summary style="cursor:pointer;color:var(--neon);font-weight:700">📅 Ver tabla de cuotas</summary>
       ${scheduleHTML}
@@ -782,13 +1057,12 @@ function loanHTML(loan) {
     <div class="row" style="margin-top:8px">
       ${sm("✏ Editar","openEdit('loan','"+loan.id+"')","")}
       ${sm("💬 Cobro WA","whatsappLoan('"+loan.id+"')","green")}
-      ${loanBalance(loan)===0?sm("📁 Archivar","archiveLoan('"+loan.id+"')",""):""} 
+      ${loanBalance(loan)===0?sm("📁 Archivar","archiveLoan('"+loan.id+"')",""):""}
       ${sm("🗑 Eliminar","deleteRecord('loan','"+loan.id+"')","red")}
     </div>
   </article>`;
 }
 
-/* ✅ NUEVO: archivar préstamo cancelado */
 function archiveLoan(id) {
   const loan = state.loans.find(l=>l.id===id); if (!loan) return;
   if (!confirm(`¿Archivar el préstamo de ${loan.client}?`)) return;
@@ -801,16 +1075,15 @@ function deleteArchivedLoan(id) {
   state.archivedLoans = state.archivedLoans.filter(l=>l.id!==id);
   saveState(); render();
 }
-
 function whatsappCobro(contactId) {
   const c = state.contacts.find(x=>x.id===contactId); if (!c) return;
-  const msg = `Hola ${c.name}, te recordamos que tienes un seguimiento pendiente en Cedano Business. Por favor comunícate con nosotros. 🙏`;
+  const msg = `Hola ${c.name}, te recordamos que tienes un seguimiento pendiente en Cedano Business. 🙏`;
   window.open(`https://wa.me/${(c.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 function whatsappLoan(loanId) {
   const l = state.loans.find(x=>x.id===loanId); if (!l) return;
   const balance = loanBalance(l); const lateDays = calcLateDays(l);
-  const msg = `Hola ${l.client}, te recordamos que tienes un pago pendiente de *${money(balance)}* en Cedano Business.${lateDays>0?` Llevas *${lateDays} días de atraso*.`:""} Por favor realiza tu pago a la brevedad. Gracias 🙏`;
+  const msg = `Hola ${l.client}, tienes un pago pendiente de *${loanBalanceMoney(l)}* en Cedano Business.${lateDays>0?` Llevas *${lateDays} días de atraso*.`:""} Por favor realiza tu pago. Gracias 🙏`;
   const client = state.loanClients.find(c=>c.name.toLowerCase()===l.client.toLowerCase());
   window.open(`https://wa.me/${(client?.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
@@ -819,13 +1092,9 @@ function whatsappLoan(loanId) {
    VAPER
    ===================================================================== */
 function renderVaper() {
-  /* ✅ NUEVO: ranking de productos más vendidos */
   const salesByProduct = {};
-  state.vaperSales.forEach(s => {
-    salesByProduct[s.product] = (salesByProduct[s.product]||0) + Number(s.gain||0);
-  });
+  state.vaperSales.forEach(s => { salesByProduct[s.product] = (salesByProduct[s.product]||0) + Number(s.gain||0); });
   const topProducts = Object.entries(salesByProduct).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
   return `
     <h1 class="section-title">☁ Módulo Vaper</h1>
     <section class="grid-3">
@@ -839,18 +1108,22 @@ function renderVaper() {
       ${sel("vpType",["Desechable","Recargable","Líquido","Accesorio"],"Desechable")}
       ${inp("vpFlavor","Sabor / Presentación")}
       <div class="row">${inp("vpQty","Cantidad","number")}${inp("vpCost","Costo","number")}${inp("vpPrice","Precio de venta","number")}</div>
-      <div class="row"><div>${inp("vpMinStock","Stock mínimo (alerta)","number","3")}</div></div>
+      ${inp("vpMinStock","Stock mínimo (alerta)","number","3")}
       ${btn("Agregar","addVaperProduct()")}`)}
     <h2 class="section-title">Inventario</h2>
     <div id="vaperList">${state.vaperInventory.map(vaperProductHTML).join("")}</div>
-    ${topProducts.length?card("🏆 Top productos por ganancia",`
-      ${topProducts.map(([name,gain],i)=>`
-        <div class="list-item" style="display:flex;justify-content:space-between;align-items:center">
-          <span>${i===0?"🥇":i===1?"🥈":i===2?"🥉":"  "} ${esc(name)}</span>
-          <span class="pill green">${money(gain)}</span>
-        </div>`).join("")}`):""}
+    ${topProducts.length?card("🏆 Top productos por ganancia",topProducts.map(([name,gain],i)=>`
+      <div class="list-item" style="display:flex;justify-content:space-between;align-items:center">
+        <span>${i===0?"🥇":i===1?"🥈":i===2?"🥉":"  "} ${esc(name)}</span>
+        <span class="pill green">${money(gain)}</span>
+      </div>`).join("")):""}
     ${card("🛒 Registrar venta",`
-      ${inp("saleClient","Cliente")}${inp("saleProduct","Producto exacto")}
+      ${inp("saleClient","Cliente")}
+      <label class="muted" style="font-size:12px;display:block;margin-top:6px">Producto</label>
+      <select id="saleProduct">
+        <option value="">— Selecciona un producto —</option>
+        ${state.vaperInventory.map(p=>`<option value="${esc(p.product)}">${esc(p.product)} (stock: ${p.quantity})</option>`).join("")}
+      </select>
       <div class="row">${inp("saleQty","Cantidad","number")}${inp("saleDate","Fecha","text",today())}</div>
       ${sel("saleMethod",["Efectivo","Transferencia","Tarjeta","Crédito"],"Efectivo")}
       ${btn("Guardar venta","addVaperSale()")}`)}
@@ -869,12 +1142,11 @@ function filterVaper() {
   const el = document.getElementById("vaperList");
   if (el) el.innerHTML = state.vaperInventory.filter(p=>p.product.toLowerCase().includes(q)||p.flavor.toLowerCase().includes(q)||p.brand.toLowerCase().includes(q)).map(vaperProductHTML).join("");
 }
-
 function vaperProductHTML(p) {
   const gain = Number(p.price)-Number(p.cost); const low = Number(p.quantity) <= Number(p.minStock||3);
   return `<article class="card" style="${low?"border-color:rgba(255,204,77,.6)":""}">
     <h3 class="title">☁ ${esc(p.product)} ${low?`<span class="pill warn">⚠ Stock bajo (mín: ${p.minStock||3})</span>`:""}</h3>
-    <p>Marca: ${esc(p.brand)} | Modelo: ${esc(p.model)} | Sabor: ${esc(p.flavor)} | Tipo: ${esc(p.type)}</p>
+    <p>Marca: ${esc(p.brand)} | Sabor: ${esc(p.flavor)} | Tipo: ${esc(p.type)}</p>
     <p>Cantidad: <strong>${p.quantity}</strong> uds. | Costo: ${money(p.cost)} → Venta: ${money(p.price)}</p>
     <p class="green">Ganancia/ud: ${money(gain)} | Valor inventario: ${money(Number(p.quantity)*Number(p.cost))}</p>
     <div class="row" style="margin-top:8px">
@@ -905,9 +1177,7 @@ function renderBarber() {
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span class="pill green">${money(a.price)}</span>
-          ${a.completed
-            ?`<span class="pill green">✅ Completada</span>`
-            :`${sm("✅ Completar","completeBarberApt('"+a.id+"')","green")}`}
+          ${a.completed?`<span class="pill green">✅</span>`:`${sm("✅","completeBarberApt('"+a.id+"')","green")}`}
           ${sm("💬","whatsappBarber('"+a.id+"')","green")}
           ${sm("🗑","deleteRecord('barberApt','"+a.id+"')","red")}
         </div>
@@ -918,14 +1188,12 @@ function renderBarber() {
       <div class="row">${inp("barberDate","Fecha","text",today())}${inp("barberTime","Hora")}${inp("barberPrice","Precio","number")}</div>
       <label class="muted" style="font-size:12px">Barbero</label>
       ${sel("barberEmployeeSel",["(Sin asignar)",...state.barberEmployees.map(e=>e.name)],"(Sin asignar)")}
-      ${sel("barberReminder",["Sí","No"],"Sí")}
       ${btn("Agregar cita","addBarberAppointment()")}`)}
     <h2 class="section-title">Todas las citas</h2>
     <div id="barberAptList">
       ${state.barberAppointments.map(a=>`<article class="card">
         <h3 class="title">✂ ${esc(a.client)} ${a.completed?'<span class="pill green">✅ Completada</span>':'<span class="pill warn">⏳ Pendiente</span>'}</h3>
         <p>${esc(a.service)} | ${esc(a.date)} ${esc(a.time)} | Tel: ${esc(a.phone)}</p>
-        ${a.employeeId?`<p class="muted">Barbero: ${esc(state.barberEmployees.find(e=>e.id===a.employeeId)?.name||"")}</p>`:""}
         <p class="green">${money(a.price)}</p>
         <div class="row" style="margin-top:8px">
           ${!a.completed?sm("✅ Marcar completada","completeBarberApt('"+a.id+"')","green"):""}
@@ -938,7 +1206,7 @@ function renderBarber() {
     ${card("👥 Clientes frecuentes",`
       <div class="row">${inp("barberClientName","Nombre")}${inp("barberClientPhone","Teléfono")}</div>
       ${ta("barberClientHistory","Historial de cortes")}
-      ${ta("barberClientCutNotes","Notas del estilo (largo, fade, degradado...)")}
+      ${ta("barberClientCutNotes","Notas del estilo")}
       <div class="row">${inp("barberClientFrequency","Frecuencia")}${inp("barberClientBirthday","Cumpleaños")}</div>
       ${btn("Agregar cliente","addBarberClient()")}
       <div id="barberClientList">
@@ -964,29 +1232,13 @@ function renderBarber() {
       <div class="row">${inp("employeeSchedule","Horario")}${inp("employeePaid","Pagos realizados","number")}</div>
       ${btn("Agregar empleado","addEmployee()")}
       ${state.barberEmployees.map(e=>{
-        /* ✅ NUEVO: comisiones desde citas completadas asignadas */
         const empIncome = barberIncomeByEmployee(e.id);
         const empCommission = empIncome * Number(e.percent||0) / 100;
-        const generalIncome = barberIncome() - (state.barberAppointments.filter(a=>a.completed&&a.employeeId).reduce((s,a)=>s+Number(a.price||0),0));
-        const generalCommission = generalIncome * Number(e.percent||0) / 100;
         return `<div class="list-item">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div><strong>${esc(e.name)}</strong> — ${e.percent}% comisión<br>
-            <span class="muted">${esc(e.schedule||"")}</span></div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-            <div class="card metric" style="min-height:auto">
-              <div class="title" style="font-size:12px">Citas asignadas</div>
-              <div class="value" style="font-size:16px">${money(empIncome)}</div>
-              <div class="muted">Comisión: <strong class="green">${money(empCommission)}</strong></div>
-            </div>
-            <div class="card metric" style="min-height:auto">
-              <div class="title" style="font-size:12px">Sin asignar</div>
-              <div class="value" style="font-size:16px">${money(generalIncome)}</div>
-              <div class="muted">Comisión: <strong class="green">${money(generalCommission)}</strong></div>
-            </div>
-          </div>
-          <p style="margin-top:8px">Ya pagado: ${money(e.paid)} | <strong class="green">Pendiente: ${money(empCommission+generalCommission-Number(e.paid||0))}</strong></p>
+          <strong>${esc(e.name)}</strong> — ${e.percent}% comisión
+          <p class="muted">${esc(e.schedule||"")}</p>
+          <p>Ingresos asignados: ${money(empIncome)} | Comisión: <strong class="green">${money(empCommission)}</strong></p>
+          <p>Pagado: ${money(e.paid)} | Pendiente: <strong class="green">${money(empCommission-Number(e.paid||0))}</strong></p>
           ${sm("🗑","deleteRecord('employee','"+e.id+"')","red")}
         </div>`;
       }).join("")}`)}
@@ -995,10 +1247,7 @@ function renderBarber() {
       ${btn("Guardar gasto","addBarberExpense()")}
       <p style="margin-top:10px">Ingresos (completadas): ${money(barberIncome())}</p>
       <p>Gastos: ${money(barberExpenseTotal())}</p>
-      <p class="green" style="font-size:18px;font-weight:900">Ganancia: ${money(barberIncome()-barberExpenseTotal())}</p>
-      ${state.barberExpenses.length?`<details style="margin-top:10px"><summary style="cursor:pointer;color:var(--neon)">Ver gastos registrados</summary>
-        ${state.barberExpenses.slice().reverse().map(e=>`<div class="list-item" style="display:flex;justify-content:space-between"><span>${esc(e.desc||e.date)}</span><span class="pill warn">${money(e.amount)}</span></div>`).join("")}
-      </details>`:""}`)}`;
+      <p class="green" style="font-size:18px;font-weight:900">Ganancia: ${money(barberIncome()-barberExpenseTotal())}</p>`)}`;
 }
 
 function completeBarberApt(id) {
@@ -1009,7 +1258,6 @@ function completeBarberApt(id) {
   saveState(); render();
   showToast(`✅ Cita de ${apt.client} completada — ${money(apt.price)} registrado`);
 }
-
 function filterBarber() {
   const q = (document.getElementById("barberSearch")?.value||"").toLowerCase();
   const el = document.getElementById("barberAptList");
@@ -1020,10 +1268,9 @@ function filterBarber() {
     <div class="row">${sm("🗑","deleteRecord('barberApt','"+a.id+"')","red")}</div>
   </article>`).join("");
 }
-
 function whatsappBarber(aptId) {
   const a = state.barberAppointments.find(x=>x.id===aptId); if (!a) return;
-  const msg = `Hola ${a.client} 💈, te recordamos tu cita en la barbería el *${a.date}* a las *${a.time}* para *${a.service}*. Precio: *${money(a.price)}*. ¡Te esperamos!`;
+  const msg = `Hola ${a.client} 💈, te recordamos tu cita el *${a.date}* a las *${a.time}* para *${a.service}*. Precio: *${money(a.price)}*. ¡Te esperamos!`;
   window.open(`https://wa.me/${(a.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 function whatsappBarberClient(clientId) {
@@ -1038,11 +1285,12 @@ function whatsappBarberClient(clientId) {
 function renderReports() {
   const mora = state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora").length;
   const totalGains = Number(state.moneyToday)-Number(state.moneySpent);
-  /* ✅ NUEVO: comparación mes vs anterior */
   const curMonthTotal = state.monthlyRevenue.reduce((s,v)=>s+v,0);
   const prevMonthTotal = (state.prevMonthRevenue||[]).reduce((s,v)=>s+v,0);
   const monthDiff = curMonthTotal - prevMonthTotal;
   const monthPct = prevMonthTotal ? Math.round(Math.abs(monthDiff)/prevMonthTotal*100) : 0;
+  const last7 = state.history.slice(0,7);
+  const avgDiscipline = last7.length ? Math.round(last7.reduce((s,d)=>s+(d.discipline||0),0)/last7.length) : 0;
   return `
     <h1 class="section-title">▥ Reportes</h1>
     <section class="grid-3">
@@ -1051,36 +1299,30 @@ function renderReports() {
       ${metric("✂","Barbería",money(barberIncome()-barberExpenseTotal()),"Ganancia")}
     </section>
     ${card("📅 Calendario",renderCalendar())}
-    ${card("📈 Ganancias diarias",`<div class="chart-wrap"><canvas id="chartDaily" role="img" aria-label="Ganancias diarias de la semana"></canvas></div>`)}
+    ${card("📈 Ganancias diarias",`<div class="chart-wrap"><canvas id="chartDaily"></canvas></div>`)}
     ${card("📊 Comparación mensual",`
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div>
-          <p class="label">Este mes</p>
-          <p class="big-money" style="font-size:22px">${money(curMonthTotal)}</p>
-        </div>
+        <div><p class="label">Este mes</p><p class="big-money" style="font-size:22px">${money(curMonthTotal)}</p></div>
         <div style="text-align:center">
           <p class="label">vs mes anterior</p>
           <p style="font-size:18px;font-weight:900;color:${monthDiff>=0?"var(--neon)":"var(--danger)"}">
             ${monthDiff>=0?"▲":"▼"} ${monthPct}%
           </p>
-          <p class="muted" style="font-size:12px">${monthDiff>=0?"+":" "}${money(Math.abs(monthDiff))}</p>
         </div>
-        <div style="text-align:right">
-          <p class="label">Mes anterior</p>
-          <p class="big-money" style="font-size:22px;color:var(--muted)">${money(prevMonthTotal)}</p>
-        </div>
+        <div style="text-align:right"><p class="label">Mes anterior</p><p class="big-money" style="font-size:22px;color:var(--muted)">${money(prevMonthTotal)}</p></div>
       </div>
-      <div class="chart-wrap"><canvas id="chartMonthly" role="img" aria-label="Comparación de ganancias mensuales"></canvas></div>`)}
-    ${card("🏢 Rendimiento por negocio",`<div class="chart-wrap"><canvas id="chartBusiness" role="img" aria-label="Distribución de ingresos por negocio"></canvas></div>`)}
+      <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>`)}
+    ${card("🏢 Rendimiento por negocio",`<div class="chart-wrap"><canvas id="chartBusiness"></canvas></div>`)}
     ${card("💰 Patrimonio total",patrimonioHTML())}
+    ${last7.length?card("📅 Historial últimos 7 días",`
+      <p class="muted" style="font-size:12px;margin-bottom:12px">Disciplina promedio: <strong style="color:var(--neon)">${avgDiscipline}%</strong></p>
+      ${last7.map(dayHTML).join("")}`):""}
     ${card("📊 Reportes automáticos",`
       <p>Ganancias del día: ${money(totalGains)}</p>
       <p>Estimado semanal: ${money(totalGains*7)}</p>
       <p>Estimado mensual: ${money(totalGains*30)}</p>
       <p>Gastos registrados: ${money(Number(state.moneySpent)+barberExpenseTotal())}</p>
       <p>Clientes morosos: ${mora}</p>
-      <p>Mora total: ${money(state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora").reduce((s,l)=>s+loanBalance(l),0))}</p>
-      <p>Estado: <span class="${totalGains>=0?"green":""}" style="${totalGains<0?"color:var(--danger)":""}">${totalGains>=0?"✅ Positivo":"❌ Negativo"}</span></p>
       <div class="backup-bar">
         ${btn("📤 Exportar backup","exportBackup()","secondary")}
         ${btn("📥 Importar backup","importBackupTrigger()","secondary")}
@@ -1092,10 +1334,8 @@ function renderReports() {
     ${card("⚙ Configuración de alertas",`
       <label class="muted" style="font-size:12px">Días de atraso para alerta de mora</label>
       ${inp("notifOverdueDays","Días","number",state.notifSettings?.loanOverdueDays||3)}
-      ${btn("Guardar alertas","saveNotifSettings()")}
-    `)}
+      ${btn("Guardar alertas","saveNotifSettings()")}`)}
     ${card("🔒 Seguridad PIN",`
-      <p class="muted" style="margin-bottom:10px">Protege la app con un PIN de 4 dígitos.</p>
       ${inp("newPin","PIN de 4 dígitos","number")}
       ${btn(state.pinEnabled?"Actualizar PIN":"Activar PIN","savePin()")}
       ${state.pinEnabled?btn("Desactivar PIN","disablePin()","danger-btn"):""}`)}
@@ -1107,69 +1347,37 @@ function renderReports() {
       ${inp("usdRateInput","Tasa USD → RD$","number",state.usdRate)}
       ${btn("Guardar configuración","saveProfile()")}
       ${btn("👋 Ver onboarding","openOnboard()","secondary")}
-      ${btn("🗑 Reiniciar todos los datos","resetData()","danger-btn")}`)}
-    <h2 class="section-title">Historial (últimos 7 días)</h2>
-    ${state.history.length?state.history.map(dayHTML).join(""):`<div class="card"><div class="empty">Guarda un cierre nocturno para ver el historial.</div></div>`}`;
+      ${btn("🗑 Reiniciar todos los datos","resetData()","danger-btn")}`)}`;
 }
 
-/* ✅ NUEVO: configuración de alertas */
 function saveNotifSettings() {
   const days = Number(document.getElementById("notifOverdueDays")?.value||3);
   state.notifSettings = { ...state.notifSettings, loanOverdueDays: days };
-  saveState(); render(); showToast("✅ Configuración de alertas guardada");
+  saveState(); render(); showToast("✅ Alertas guardadas");
 }
 
-/* ✅ NUEVO: imprimir reporte completo */
 function printReport() {
   const mora = state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora");
   const win = window.open("","_blank","width=800,height=900");
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte Cedano Business</title>
-  <style>
-    body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:780px;margin:0 auto}
-    h1{color:#0a7a34;border-bottom:2px solid #0a7a34;padding-bottom:10px}
-    h2{color:#0a7a34;margin-top:24px}
-    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
-    th{background:#0a7a34;color:#fff;padding:8px;text-align:left}
-    td{padding:7px 8px;border-bottom:1px solid #ddd}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}
-    .metric{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center}
-    .metric .val{font-size:22px;font-weight:900;color:#0a7a34}
-    .metric .lbl{font-size:12px;color:#666;margin-top:4px}
-    .footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;text-align:center}
-    @media print{body{padding:15px}}
-  </style></head><body>
+  <style>body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:780px;margin:0 auto}h1{color:#0a7a34;border-bottom:2px solid #0a7a34;padding-bottom:10px}h2{color:#0a7a34;margin-top:24px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}th{background:#0a7a34;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #ddd}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}.metric{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center}.metric .val{font-size:22px;font-weight:900;color:#0a7a34}.footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;text-align:center}</style></head><body>
   <h1>📊 Reporte Cedano Business</h1>
   <p>Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</p>
-  <p>Empresario: <strong>${esc(state.userName)}</strong> | Negocio: <strong>${esc(state.businessName)}</strong></p>
   <div class="grid">
-    <div class="metric"><div class="val">${money(state.capital)}</div><div class="lbl">Capital efectivo</div></div>
-    <div class="metric"><div class="val">${money(patrimonyTotal())}</div><div class="lbl">Patrimonio total</div></div>
-    <div class="metric"><div class="val">${money(state.moneyToday)}</div><div class="lbl">Generado hoy</div></div>
-    <div class="metric"><div class="val">${money(totalLoanBalance())}</div><div class="lbl">Por cobrar (préstamos)</div></div>
-    <div class="metric"><div class="val">${money(vaperGain())}</div><div class="lbl">Ganancias vaper</div></div>
-    <div class="metric"><div class="val">${money(barberIncome())}</div><div class="lbl">Ingresos barbería</div></div>
+    <div class="metric"><div class="val">${money(state.capital)}</div><div>Capital efectivo</div></div>
+    <div class="metric"><div class="val">${money(patrimonyTotal())}</div><div>Patrimonio total</div></div>
+    <div class="metric"><div class="val">${money(totalLoanBalance())}</div><div>Por cobrar</div></div>
   </div>
-  <h2>💵 Préstamos activos (${state.loans.length})</h2>
+  <h2>💵 Préstamos (${state.loans.length})</h2>
   <table><thead><tr><th>Cliente</th><th>Capital</th><th>Balance</th><th>Estado</th><th>Días atraso</th></tr></thead><tbody>
-    ${state.loans.map(l=>`<tr><td>${esc(l.client)}</td><td>${money(l.capital)}</td><td>${money(loanBalance(l))}</td><td>${l.status}</td><td>${calcLateDays(l)}</td></tr>`).join("")}
+    ${state.loans.map(l=>`<tr><td>${esc(l.client)}</td><td>${money(l.capital,l.currency)}</td><td>${loanBalanceMoney(l)}</td><td>${l.status}</td><td>${calcLateDays(l)}</td></tr>`).join("")}
   </tbody></table>
-  ${mora.length?`<h2 style="color:#d42030">🔴 Clientes en mora (${mora.length})</h2>
-  <table><thead><tr><th>Cliente</th><th>Balance</th><th>Días</th></tr></thead><tbody>
-    ${mora.map(l=>`<tr><td>${esc(l.client)}</td><td>${money(loanBalance(l))}</td><td>${calcLateDays(l)}</td></tr>`).join("")}
-  </tbody></table>`:""}
-  <h2>☁ Inventario Vaper (${state.vaperInventory.length} productos)</h2>
-  <table><thead><tr><th>Producto</th><th>Marca</th><th>Stock</th><th>Costo</th><th>Venta</th><th>Ganancia/ud</th></tr></thead><tbody>
-    ${state.vaperInventory.map(p=>`<tr style="${Number(p.quantity)<=Number(p.minStock||3)?"background:#fff3cd":""}"><td>${esc(p.product)}</td><td>${esc(p.brand)}</td><td>${p.quantity}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td><td>${money(Number(p.price)-Number(p.cost))}</td></tr>`).join("")}
+  <h2>☁ Inventario Vaper</h2>
+  <table><thead><tr><th>Producto</th><th>Stock</th><th>Costo</th><th>Venta</th></tr></thead><tbody>
+    ${state.vaperInventory.map(p=>`<tr><td>${esc(p.product)}</td><td>${p.quantity}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td></tr>`).join("")}
   </tbody></table>
-  <h2>✂ Barbería</h2>
-  <p>Ingresos totales: <strong>${money(barberIncome())}</strong> | Gastos: <strong>${money(barberExpenseTotal())}</strong> | Ganancia neta: <strong>${money(barberIncome()-barberExpenseTotal())}</strong></p>
-  <table><thead><tr><th>Cliente</th><th>Servicio</th><th>Fecha</th><th>Precio</th><th>Estado</th></tr></thead><tbody>
-    ${state.barberAppointments.map(a=>`<tr><td>${esc(a.client)}</td><td>${esc(a.service)}</td><td>${esc(a.date)}</td><td>${money(a.price)}</td><td>${a.completed?"Completada":"Pendiente"}</td></tr>`).join("")}
-  </tbody></table>
-  <div class="footer">Cedano Business — Generado automáticamente</div>
-  </body></html>`);
-  win.document.close();
-  setTimeout(()=>win.print(),500);
+  <div class="footer">Cedano Business — v5.0</div></body></html>`);
+  win.document.close(); setTimeout(()=>win.print(),500);
 }
 
 function renderCalendar() {
@@ -1180,12 +1388,7 @@ function renderCalendar() {
   let startDow = firstDay.getDay(); if (startDow===0) startDow=7;
   const todayStr = today();
   const eventsByDate = {};
-  /* ✅ FIX: usar calendarEvents por ID propio, no mezclar con appointments */
-  state.calendarEvents.forEach(e=>{
-    if (!eventsByDate[e.date]) eventsByDate[e.date]=[];
-    eventsByDate[e.date].push(e);
-  });
-  /* Agregar citas de barbería sin duplicar con calendarEvents */
+  state.calendarEvents.forEach(e=>{ if (!eventsByDate[e.date]) eventsByDate[e.date]=[]; eventsByDate[e.date].push(e); });
   const calEventKeys = new Set(state.calendarEvents.map(e=>e.type+e.date+e.title));
   state.barberAppointments.forEach(a=>{
     const key = "cita"+a.date+a.client;
@@ -1207,13 +1410,9 @@ function renderCalendar() {
   while(cells.length%7!==0) cells.push({empty:true});
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <button class="small-btn" onclick="prevMonth()" aria-label="Mes anterior">◀</button>
+      <button class="small-btn" onclick="prevMonth()">◀</button>
       <strong>${months[calendarMonth]} ${calendarYear}</strong>
-      <button class="small-btn" onclick="nextMonth()" aria-label="Mes siguiente">▶</button>
-    </div>
-    <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap">
-      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--neon);margin-right:4px"></span><small>Cobro</small>
-      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--purple);margin-right:4px"></span><small>Cita</small>
+      <button class="small-btn" onclick="nextMonth()">▶</button>
     </div>
     <div class="cal-grid">
       ${weekDays.map(d=>`<div style="text-align:center;font-size:11px;color:var(--muted);font-weight:800;padding-bottom:4px">${d}</div>`).join("")}
@@ -1224,7 +1423,6 @@ function renderCalendar() {
         </div>`).join("")}
     </div>`;
 }
-
 function prevMonth() { calendarMonth--; if(calendarMonth<0){calendarMonth=11;calendarYear--;} render(); }
 function nextMonth() { calendarMonth++; if(calendarMonth>11){calendarMonth=0;calendarYear++;} render(); }
 
@@ -1232,8 +1430,8 @@ function patrimonioHTML() {
   const items=[
     {label:"Efectivo",val:Number(state.capital)},
     {label:"Préstamos (por cobrar)",val:totalLoanBalance()},
-    {label:"Inventario Vaper (costo)",val:vaperInventoryValue()},
-    {label:"Ganancia Vaper (realizada)",val:vaperGain()},
+    {label:"Inventario Vaper",val:vaperInventoryValue()},
+    {label:"Ganancia Vaper",val:vaperGain()},
     {label:"Ahorros",val:Number(state.savings||0)}
   ];
   const total=patrimonyTotal();
@@ -1241,7 +1439,6 @@ function patrimonioHTML() {
     <div style="margin-bottom:12px">
       <p class="label">Patrimonio Total</p>
       <p style="font-size:28px;font-weight:900;color:var(--neon)">${money(total)}</p>
-      <p class="muted" style="font-size:12px">Efectivo + Préstamos + Inventario + Ganancias Vaper + Ahorros</p>
     </div>
     ${items.map(i=>`<div class="pat-row">
       <div class="pat-label">${i.label}</div>
@@ -1256,14 +1453,15 @@ function patrimonioHTML() {
 }
 
 function dayHTML(day) {
-  return `<article class="card">
-    <h3 class="title">📅 ${esc(day.date)}</h3>
-    <p>Completadas: ${day.completed} | Pendientes: ${day.pending}</p>
-    <p>Misión: ${esc(day.mission||"Sin misión")}</p>
-    <p>Dinero: ${money(day.moneyToday)} | Gastos: ${money(day.moneySpent)}</p>
-    <p>Horas productivas: ${day.productiveHours}</p>
-    <p class="green">Estado: ${day.status} | Disciplina: ${day.discipline||0}%</p>
-    <p class="muted">${esc(day.note||"Sin nota")}</p>
+  return `<article class="card" style="margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 class="title" style="margin:0">📅 ${esc(day.date)}</h3>
+      <span class="pill ${day.status==="Excelente"||day.status==="Bueno"?"green":day.status==="Regular"?"warn":"danger"}">${day.status}</span>
+    </div>
+    <p>✅ ${day.completed} completadas | ⏳ ${day.pending} pendientes</p>
+    <p>💵 ${money(day.moneyToday)} generado | 💸 ${money(day.moneySpent)} gastos</p>
+    <p class="green">Disciplina: ${day.discipline||0}%</p>
+    ${day.note?`<p class="muted" style="font-size:12px;margin-top:4px">${esc(day.note)}</p>`:""}
   </article>`;
 }
 
@@ -1298,6 +1496,11 @@ function renderImperio() {
   const xpPct = Math.min(100,Math.round(state.xp/nextRankXP()*100));
   const habitsCompleted = state.habits.filter(h=>h.done).length;
   const discipline = Math.round(habitsCompleted/Math.max(1,state.habits.length)*100);
+  /* ✅ Estadísticas de historial de 90 días */
+  const hist90 = state.history.slice(0,90);
+  const bestDay = hist90.length ? hist90.reduce((best,d) => Number(d.moneyToday)>Number(best.moneyToday)?d:best, hist90[0]) : null;
+  const avgMoney = hist90.length ? hist90.reduce((s,d)=>s+Number(d.moneyToday||0),0)/hist90.length : 0;
+  const avgDiscipline = hist90.length ? Math.round(hist90.reduce((s,d)=>s+(d.discipline||0),0)/hist90.length) : 0;
   return `
     <div class="imperio-hero">
       <div class="imperio-rank">${rankIcon()}</div>
@@ -1305,37 +1508,32 @@ function renderImperio() {
       <div class="imperio-sub">${esc(state.businessName)}</div>
     </div>
     <div class="card">
-      <div class="row" style="margin-bottom:6px"><span class="label">XP: ${state.xp}</span><span class="label" style="text-align:right">Próximo rango: ${nextRankXP()} XP</span></div>
+      <div class="row" style="margin-bottom:6px"><span class="label">XP: ${state.xp}</span><span class="label" style="text-align:right">Próximo: ${nextRankXP()} XP</span></div>
       <div class="xp-bar"><div class="xp-fill" style="width:${xpPct}%"></div></div>
     </div>
     <section class="grid">
       ${metric("💰","Patrimonio total",money(total),"Actualizado")}
-      ${metric("📈","Disciplina hoy",discipline+"%","Hábitos completados")}
+      ${metric("📈","Disciplina hoy",discipline+"%","Hábitos")}
       ${metric("⚔","XP total",state.xp,"Puntos")}
       ${metric("🏆","Rango",rank(),"Nivel actual")}
     </section>
+    ${hist90.length?card("📊 Estadísticas (últimos "+hist90.length+" días)",`
+      <div class="grid-3">
+        ${metric("💵","Mejor día",bestDay?money(bestDay.moneyToday):"—","Registrado")}
+        ${metric("📈","Promedio diario",money(avgMoney),"Ingresos")}
+        ${metric("🧠","Disciplina media",avgDiscipline+"%","Promedio")}
+      </div>`):""}
     ${card("💰 Patrimonio desglosado",patrimonioHTML())}
     ${card("🎯 Metas anuales",`
       <p>💰 <strong>Patrimonio:</strong> Meta RD$2,000,000 — actual ${money(total)}</p>
       <div class="progress"><span style="width:${Math.min(100,Math.round(total/2000000*100))}%"></span></div>
-      <p>💪 <strong>Gym:</strong> Streak de ${state.habitStats.daysTraining} días</p>
-      <p>🏢 <strong>Negocios:</strong> ${state.loans.length} préstamos | ${state.vaperInventory.length} productos | ${state.barberClients.length} clientes barbería</p>`)}
-    ${card("📊 Rendimiento por negocio",`
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-        ${[["💰 Préstamos","#22d468",totalLoanBalance(),2000000],["☁ Vaper","#4db5ff",vaperGain(),50000],["✂ Barbería","#c084fc",barberIncome(),30000]].map(([n,c,v,max])=>`
-          <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>${n}</span><span style="color:${c};font-weight:800">${money(v)}</span></div>
-          <div class="progress"><span style="width:${Math.min(100,Math.round(v/max*100))}%;background:${c}"></span></div></div>`).join("")}
-      </div>`)}
+      <p style="margin-top:8px">🏢 <strong>Negocios:</strong> ${state.loans.length} préstamos | ${state.vaperInventory.length} productos | ${state.barberClients.length} clientes</p>`)}
     <h2 class="section-title">🏆 Logros</h2>
     ${state.achievements.map(a=>`<div class="achievement${a.unlocked?" unlocked":" locked"}">
       <div class="achievement-icon">${a.icon}</div>
       <div class="achievement-info"><strong>${esc(a.title)}</strong><small>${esc(a.desc)}</small></div>
-      ${a.unlocked?'<span class="pill gold">✔ Desbloqueado</span>':'<span class="pill">🔒 Bloqueado</span>'}
-    </div>`).join("")}
-    ${card("🏆 Sistema de niveles",`
-      <p class="pill">🪖 Recluta — 0 XP</p><p class="pill">🏅 Sargento — 600 XP</p>
-      <p class="pill warn">🎖 Mayor — 1,200 XP</p><p class="pill blue">⭐ Capitán — 2,000 XP</p>
-      <p class="pill gold">⭐⭐ Coronel — 3,000 XP</p><p class="pill green">⭐⭐⭐ General — 5,000 XP</p>`)}`;
+      ${a.unlocked?'<span class="pill gold">✔</span>':'<span class="pill">🔒</span>'}
+    </div>`).join("")}`;
 }
 
 /* =====================================================================
@@ -1422,9 +1620,7 @@ function openEdit(type, id) {
   }
   openModal("editModal");
 }
-
 function closeEditModal() { closeModal("editModal"); editingId=null; editingType=null; }
-
 function saveEdit() {
   const g = id=>{ const el=document.getElementById(id); return el?el.value:""; };
   if (editingType==="task") {
@@ -1440,8 +1636,7 @@ function saveEdit() {
   } else if (editingType==="barberClient") {
     state.barberClients=state.barberClients.map(c=>c.id!==editingId?c:{...c,name:g("eBcName"),phone:g("eBcPhone"),history:g("eBcHistory"),cutNotes:g("eBcCutNotes"),frequency:g("eBcFreq"),birthday:g("eBcBday")});
   }
-  saveState(); closeEditModal(); render();
-  showToast("✅ Cambios guardados");
+  saveState(); closeEditModal(); render(); showToast("✅ Cambios guardados");
 }
 
 /* =====================================================================
@@ -1466,9 +1661,11 @@ function deleteHabit(id) { state.habits=state.habits.filter(h=>h.id!==id); saveS
    BACKUP & CSV
    ===================================================================== */
 function exportBackup() {
+  state.lastBackupDate = today(); saveState();
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`cedano-backup-${today()}.json`; a.click();
+  showToast("📦 Backup exportado");
 }
 function importBackupTrigger() { document.getElementById("importFile").click(); }
 function importBackup(input) {
@@ -1487,8 +1684,8 @@ function exportCSV(type) {
   let rows=[]; let filename="";
   if (type==="loans") {
     filename=`cedano-prestamos-${today()}.csv`;
-    rows=[["Cliente","Capital","Interés","Frecuencia","Fecha inicio","Fecha venc.","Pagado","Balance","Estado","Días atraso"]];
-    state.loans.forEach(l=>rows.push([l.client,l.capital,l.interest+"%",l.frequency,l.startDate||"",l.dueDate||"",l.paid,loanBalance(l),l.status,calcLateDays(l)]));
+    rows=[["Cliente","Capital","Moneda","Interés","Frecuencia","Fecha inicio","Fecha venc.","Pagado","Balance","Estado","Días atraso"]];
+    state.loans.forEach(l=>rows.push([l.client,l.capital,l.currency||"RD$",l.interest+"%",l.frequency,l.startDate||"",l.dueDate||"",l.paid,loanBalance(l),l.status,calcLateDays(l)]));
   } else if (type==="vaper") {
     filename=`cedano-ventas-vaper-${today()}.csv`;
     rows=[["Cliente","Producto","Cantidad","Fecha","Método","Ganancia"]];
@@ -1523,37 +1720,69 @@ function saveMission() {
 }
 function completeMission() { setState({xp:state.xp+50}); showToast("⚔ +50 XP — ¡Misión completada!"); }
 function saveMoney() {
-  setState({moneyGoal:Number(document.getElementById("goalInput")?.value||state.moneyGoal),moneyToday:Number(document.getElementById("todayMoneyInput")?.value||state.moneyToday)});
+  setState({
+    moneyGoal:Number(document.getElementById("goalInput")?.value||state.moneyGoal),
+    moneyToday:Number(document.getElementById("todayMoneyInput")?.value||state.moneyToday)
+  });
   showToast("✅ Meta actualizada");
 }
 function updatePatrimony() {
-  setState({capital:Number(document.getElementById("capitalInput")?.value||state.capital),savings:Number(document.getElementById("savingsInput")?.value||state.savings)});
+  setState({
+    capital:Number(document.getElementById("capitalInput")?.value||state.capital),
+    savings:Number(document.getElementById("savingsInput")?.value||state.savings)
+  });
   showToast("✅ Patrimonio actualizado");
 }
 function saveProfile() {
-  setState({userName:document.getElementById("profileName")?.value||state.userName,businessName:document.getElementById("profileBusiness")?.value||state.businessName,capital:Number(document.getElementById("profileCapital")?.value||state.capital),usdRate:Number(document.getElementById("usdRateInput")?.value||state.usdRate)});
+  setState({
+    userName:document.getElementById("profileName")?.value||state.userName,
+    businessName:document.getElementById("profileBusiness")?.value||state.businessName,
+    capital:Number(document.getElementById("profileCapital")?.value||state.capital),
+    usdRate:Number(document.getElementById("usdRateInput")?.value||state.usdRate)
+  });
   showToast("✅ Configuración guardada");
 }
 
 function addHabit() {
   const t=document.getElementById("newHabitInput")?.value.trim(); if (!t) return;
-  state.habits.push({id:uid(),text:t,done:false,streak:0});
+  state.habits.push({id:uid(),text:t,done:false,streak:0,lastDone:""});
   saveState(); render(); showToast("✅ Hábito agregado");
 }
 function toggleHabit(id) {
   state.habits=state.habits.map(h=>{
     if (h.id!==id) return h;
-    const done=!h.done; if (done) state.xp+=5;
-    return {...h,done,streak:done?h.streak+1:Math.max(0,h.streak-1)};
-  }); saveState(); render();
+    const done=!h.done;
+    if (done) state.xp+=5;
+    /* ✅ Racha real: guardar fecha de cuando se completó */
+    return {
+      ...h, done,
+      streak: done ? h.streak+1 : Math.max(0,h.streak-1),
+      lastDone: done ? today() : h.lastDone
+    };
+  });
+  saveState(); render();
 }
 function addTask() {
   const text=document.getElementById("taskText")?.value.trim(); if (!text) return;
-  state.tasks.push({id:uid(),text,type:document.getElementById("taskType")?.value||"Diario",date:document.getElementById("taskDate")?.value||"",time:document.getElementById("taskTime")?.value||"",priority:document.getElementById("taskPriority")?.value||"Media",done:false});
+  state.tasks.push({
+    id:uid(),text,
+    type:document.getElementById("taskType")?.value||"Diario",
+    date:document.getElementById("taskDate")?.value||"",
+    time:document.getElementById("taskTime")?.value||"",
+    priority:document.getElementById("taskPriority")?.value||"Media",
+    done:false, completedAt:""
+  });
   saveState(); render(); showToast("✅ Tarea agregada");
 }
 function toggleTask(id) {
-  state.tasks=state.tasks.map(t=>{if(t.id!==id) return t; const done=!t.done; if(done) state.xp+=10; return{...t,done};});
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"});
+  state.tasks=state.tasks.map(t=>{
+    if(t.id!==id) return t;
+    const done=!t.done;
+    if(done) state.xp+=10;
+    return{...t,done,completedAt:done?timeStr:""};
+  });
   saveState(); render();
 }
 function saveTomorrowPlan() {
@@ -1567,12 +1796,28 @@ function saveTomorrowPlan() {
 }
 function addLoanClient() {
   const name=document.getElementById("clientName")?.value.trim(); if (!name) return;
-  state.loanClients.push({id:uid(),name,photo:"",cedula:document.getElementById("clientCedula")?.value||"",phone:document.getElementById("clientPhone")?.value||"",address:document.getElementById("clientAddress")?.value||"",reference:document.getElementById("clientReference")?.value||"",notes:document.getElementById("clientNotes")?.value||"",lastVisit:today()});
+  state.loanClients.push({
+    id:uid(),name,photo:"",
+    cedula:document.getElementById("clientCedula")?.value||"",
+    phone:document.getElementById("clientPhone")?.value||"",
+    address:document.getElementById("clientAddress")?.value||"",
+    reference:document.getElementById("clientReference")?.value||"",
+    notes:document.getElementById("clientNotes")?.value||"",
+    lastVisit:today()
+  });
   saveState(); render(); showToast("✅ Cliente agregado");
 }
 function addContact() {
   const name=document.getElementById("contactName")?.value.trim(); if (!name) return;
-  state.contacts.push({id:uid(),name,phone:document.getElementById("contactPhone")?.value||"",address:document.getElementById("contactAddress")?.value||"",source:document.getElementById("contactSource")?.value||"",note:document.getElementById("contactNote")?.value||"",priority:document.getElementById("contactPriority")?.value||"Media",status:"Pendiente"});
+  state.contacts.push({
+    id:uid(),name,
+    phone:document.getElementById("contactPhone")?.value||"",
+    address:document.getElementById("contactAddress")?.value||"",
+    source:document.getElementById("contactSource")?.value||"",
+    note:document.getElementById("contactNote")?.value||"",
+    priority:document.getElementById("contactPriority")?.value||"Media",
+    status:"Pendiente"
+  });
   saveState(); render();
 }
 function updateContactStatus(id) { setContactStatus(id,document.getElementById("status-"+id)?.value); }
@@ -1584,8 +1829,18 @@ function addLoan() {
   const client=document.getElementById("loanClient")?.value.trim();
   const capital=Number(document.getElementById("loanCapital")?.value);
   if (!client||!capital) { showToast("❌ Completa cliente y capital","err"); return; }
-  let capitalRD=capital; if (loanCurrency==="USD") capitalRD=capital*Number(state.usdRate||59);
-  state.loans.push({id:uid(),client,capital:capitalRD,interest:Number(document.getElementById("loanInterest")?.value||0),currency:loanCurrency,startDate:document.getElementById("loanStartDate")?.value||today(),dueDate:document.getElementById("loanDueDate")?.value||"",frequency:document.getElementById("loanFrequency")?.value||"Semanal",paid:0,lateDays:0,status:"Al día"});
+  let capitalRD=capital;
+  if (loanCurrency==="USD") capitalRD=capital*Number(state.usdRate||59);
+  state.loans.push({
+    id:uid(),client,
+    capital: loanCurrency==="USD" ? capital : capitalRD,
+    interest:Number(document.getElementById("loanInterest")?.value||0),
+    currency:loanCurrency,
+    startDate:document.getElementById("loanStartDate")?.value||today(),
+    dueDate:document.getElementById("loanDueDate")?.value||"",
+    frequency:document.getElementById("loanFrequency")?.value||"Semanal",
+    paid:0,lateDays:0,status:"Al día"
+  });
   saveState(); render(); showToast("✅ Préstamo registrado");
 }
 function updateLoanStatus(id) {
@@ -1601,41 +1856,58 @@ function addPayment() {
   const loan=state.loans.find(l=>l.client.toLowerCase()===client.toLowerCase());
   if (!loan) { showToast("❌ Cliente no encontrado en préstamos","err"); return; }
   const balance=loanBalance(loan);
-  if (amount>balance) { showToast(`❌ El pago (${money(amount)}) excede el balance (${money(balance)})`, "err"); return; }
+  if (amount>balance+0.01) { showToast(`❌ El pago excede el balance (${loanBalanceMoney(loan)})`,"err"); return; }
   state.payments.push({id:uid(),client,amount,date:document.getElementById("paymentDate")?.value||today()});
   state.loans=state.loans.map(l=>l.client.toLowerCase()===client.toLowerCase()?{...l,paid:Number(l.paid||0)+amount}:l);
   state.moneyToday+=amount;
-  /* Si el balance queda en 0, archivar automáticamente */
   const updatedBalance=loanBalance({...loan,paid:Number(loan.paid||0)+amount});
-  if (updatedBalance<=0) {
-    setTimeout(()=>{
-      if (confirm(`✅ ${client} pagó su préstamo completo. ¿Archivar este préstamo?`)) archiveLoan(loan.id);
-    },300);
+  if (updatedBalance<=0.01) {
+    setTimeout(()=>{ if(confirm(`✅ ${client} pagó completo. ¿Archivar?`)) archiveLoan(loan.id); },300);
   }
   saveState(); render(); showToast(`✅ Pago de ${money(amount)} registrado`);
 }
 
 function addVaperProduct() {
   const product=document.getElementById("vpProduct")?.value.trim(); if (!product) return;
-  state.vaperInventory.push({id:uid(),product,brand:document.getElementById("vpBrand")?.value||"",model:document.getElementById("vpModel")?.value||"",type:document.getElementById("vpType")?.value||"Desechable",flavor:document.getElementById("vpFlavor")?.value||"",quantity:Number(document.getElementById("vpQty")?.value||0),cost:Number(document.getElementById("vpCost")?.value||0),price:Number(document.getElementById("vpPrice")?.value||0),minStock:Number(document.getElementById("vpMinStock")?.value||3)});
+  state.vaperInventory.push({
+    id:uid(),product,
+    brand:document.getElementById("vpBrand")?.value||"",
+    model:document.getElementById("vpModel")?.value||"",
+    type:document.getElementById("vpType")?.value||"Desechable",
+    flavor:document.getElementById("vpFlavor")?.value||"",
+    quantity:Number(document.getElementById("vpQty")?.value||0),
+    cost:Number(document.getElementById("vpCost")?.value||0),
+    price:Number(document.getElementById("vpPrice")?.value||0),
+    minStock:Number(document.getElementById("vpMinStock")?.value||3)
+  });
   saveState(); render(); showToast("✅ Producto agregado");
 }
 function addVaperSale() {
-  const productName=document.getElementById("saleProduct")?.value.trim(); if (!productName) return;
-  const item=state.vaperInventory.find(p=>p.product.toLowerCase()===productName.toLowerCase());
+  /* ✅ Fix: usa select en lugar de texto libre */
+  const productName=document.getElementById("saleProduct")?.value; if (!productName) { showToast("❌ Selecciona un producto","err"); return; }
+  const item=state.vaperInventory.find(p=>p.product===productName);
   const qty=Number(document.getElementById("saleQty")?.value||1);
-  if (item&&Number(item.quantity)<qty) { showToast("❌ Stock insuficiente","err"); return; }
-  const gain=item?(Number(item.price)-Number(item.cost))*qty:0;
-  const income=item?Number(item.price)*qty:0;
-  state.vaperSales.push({id:uid(),client:document.getElementById("saleClient")?.value||"",product:productName,quantity:qty,date:document.getElementById("saleDate")?.value||today(),method:document.getElementById("saleMethod")?.value||"Efectivo",gain});
-  if (item) { item.quantity=Math.max(0,Number(item.quantity)-qty); state.moneyToday+=income; }
-  /* Verificar logro primera venta */
+  if (!item) { showToast("❌ Producto no encontrado","err"); return; }
+  if (Number(item.quantity)<qty) { showToast(`❌ Stock insuficiente (hay ${item.quantity})`, "err"); return; }
+  const gain=(Number(item.price)-Number(item.cost))*qty;
+  const income=Number(item.price)*qty;
+  state.vaperSales.push({
+    id:uid(),
+    client:document.getElementById("saleClient")?.value||"",
+    product:productName,quantity:qty,
+    date:document.getElementById("saleDate")?.value||today(),
+    method:document.getElementById("saleMethod")?.value||"Efectivo",
+    gain
+  });
+  item.quantity=Math.max(0,Number(item.quantity)-qty);
+  state.moneyToday+=income;
   if (state.vaperSales.length===1) {
     state.achievements=state.achievements.map(a=>a.id==="a1"?{...a,unlocked:true}:a);
     showToast("🥉 ¡Logro desbloqueado: Primera venta!");
+  } else {
+    showToast(`✅ Venta registrada — ganancia ${money(gain)}`);
   }
   saveState(); render();
-  if (!state.vaperSales.length!==1) showToast(`✅ Venta registrada — ganancia ${money(gain)}`);
 }
 function addVaperClient() {
   const name=document.getElementById("vaperClientName")?.value.trim(); if (!name) return;
@@ -1653,17 +1925,21 @@ function addBarberAppointment() {
     service:document.getElementById("barberService")?.value||"",
     date:document.getElementById("barberDate")?.value||today(),
     time:document.getElementById("barberTime")?.value||"",
-    price,
-    reminder:document.getElementById("barberReminder")?.value==="Sí",
-    completed:false,
+    price,reminder:true,completed:false,
     employeeId:emp?.id||""
   });
-  saveState(); render();
-  showToast("✅ Cita agendada — marca como completada cuando ocurra");
+  saveState(); render(); showToast("✅ Cita agendada");
 }
 function addBarberClient() {
   const name=document.getElementById("barberClientName")?.value.trim(); if (!name) return;
-  state.barberClients.push({id:uid(),name,phone:document.getElementById("barberClientPhone")?.value||"",history:document.getElementById("barberClientHistory")?.value||"",cutNotes:document.getElementById("barberClientCutNotes")?.value||"",frequency:document.getElementById("barberClientFrequency")?.value||"",birthday:document.getElementById("barberClientBirthday")?.value||""});
+  state.barberClients.push({
+    id:uid(),name,
+    phone:document.getElementById("barberClientPhone")?.value||"",
+    history:document.getElementById("barberClientHistory")?.value||"",
+    cutNotes:document.getElementById("barberClientCutNotes")?.value||"",
+    frequency:document.getElementById("barberClientFrequency")?.value||"",
+    birthday:document.getElementById("barberClientBirthday")?.value||""
+  });
   saveState(); render();
 }
 function addBarberService() {
@@ -1717,12 +1993,19 @@ function saveNightSummary() {
   const completed=completedTasks(); const pending=pendingTasks();
   const checks=["nc0","nc1","nc2","nc3","nc4"].filter(id=>document.getElementById(id)?.classList.contains("done")).length;
   const discipline=Math.round(checks/5*100);
-  const day={date:today(),completed,pending,mission:state.mission,moneyToday:state.moneyToday,moneySpent:state.moneySpent,productiveHours:Number(document.getElementById("nightHours")?.value||0),note:document.getElementById("nightNote")?.value||"",discipline,status:reached&&pending===0?"Excelente":reached?"Bueno":pending<=2?"Regular":"Malo"};
-  state.history=[day,...state.history.filter(h=>h.date!==day.date)].slice(0,7);
+  const day={
+    date:today(),completed,pending,mission:state.mission,
+    moneyToday:state.moneyToday,moneySpent:state.moneySpent,
+    productiveHours:Number(document.getElementById("nightHours")?.value||0),
+    note:document.getElementById("nightNote")?.value||"",
+    discipline,
+    status:reached&&pending===0?"Excelente":reached?"Bueno":pending<=2?"Regular":"Malo"
+  };
+  /* ✅ Historial de 90 días */
+  state.history=[day,...state.history.filter(h=>h.date!==day.date)].slice(0,90);
   state.xp+=completed*10+checks*5;
   state.disciplineScore=discipline;
   state.dailyRevenue=[...state.dailyRevenue.slice(1),state.moneyToday];
-  /* Actualizar prevMonthRevenue al cerrar el mes */
   const d=new Date();
   if (d.getDate()===1) { state.prevMonthRevenue=[...state.monthlyRevenue]; state.monthlyRevenue=[0,0,0,0,0,0]; }
   saveState(); closeNightSummary(); go("Reportes");
@@ -1731,52 +2014,98 @@ function saveNightSummary() {
 function closeDetail() { closeModal("detailModal"); }
 
 /* =====================================================================
-   IA
+   ✅ IA CON HISTORIAL DE CONVERSACIÓN
    ===================================================================== */
-function openAI() { openModal("aiModal"); }
+function openAI() { openModal("aiModal"); renderAIChat(); }
 function closeAI() { closeModal("aiModal"); }
-function askAI(q) { document.getElementById("aiInput").value=q; runAI(); }
+function askAI(q) {
+  const input = document.getElementById("aiInput");
+  if (input) input.value = q;
+  runAI();
+}
+function clearAIHistory() {
+  aiHistory = [];
+  const el = document.getElementById("aiChatHistory");
+  if (el) el.innerHTML = "";
+  showToast("🗑 Chat limpiado");
+}
+
+function renderAIChat() {
+  const el = document.getElementById("aiChatHistory");
+  if (!el || !aiHistory.length) return;
+  el.innerHTML = aiHistory.map(m => `
+    <div style="
+      padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;
+      ${m.role==="user"
+        ? "background:rgba(34,212,104,.1);border:1px solid rgba(34,212,104,.3);color:var(--text);margin-left:20px"
+        : "background:var(--card2);border:1px solid var(--line);color:var(--text);margin-right:20px"}">
+      <p style="font-size:11px;color:var(--muted);margin-bottom:4px">${m.role==="user"?"Tú":"🧠 IA"}</p>
+      ${m.content.replace(/\n/g,"<br>").replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")}
+    </div>`).join("");
+  el.scrollTop = el.scrollHeight;
+}
 
 async function runAI() {
   const q=(document.getElementById("aiInput")?.value||"").trim(); if (!q) return;
-  const res=document.getElementById("aiResponse");
-  res.style.display="block"; res.innerHTML=`<span class="muted">🧠 Analizando tu negocio...</span>`;
+  document.getElementById("aiInput").value = "";
+
   const lowStock=state.vaperInventory.filter(p=>Number(p.quantity)<=Number(p.minStock||3)).map(p=>p.product).join(", ")||"Ninguno";
-  const contexto=`Eres el asistente financiero personal de ${state.userName}, dueño de Cedano Business.
-Datos actuales del negocio (${today()}):
-- Capital en efectivo: ${money(state.capital)}
-- Ahorros: ${money(state.savings)}
-- Dinero generado hoy: ${money(state.moneyToday)} / Meta: ${money(state.moneyGoal)} (${progress()}%)
+  const systemContext=`Eres el asistente financiero personal de ${state.userName}, dueño de Cedano Business.
+Datos actuales (${today()}):
+- Capital: ${money(state.capital)} | Ahorros: ${money(state.savings)}
+- Generado hoy: ${money(state.moneyToday)} / Meta: ${money(state.moneyGoal)} (${progress()}%)
 - Patrimonio total: ${money(patrimonyTotal())}
-- Préstamos activos: ${state.loans.length} (balance por cobrar: ${money(totalLoanBalance())})
-- Clientes en mora: ${state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora").map(l=>l.client+" ("+calcLateDays(l)+" días)").join(", ")||"Ninguno"}
-- Préstamos archivados (cancelados): ${state.archivedLoans?.length||0}
-- Pagos recibidos: ${state.payments.length} (total: ${money(state.payments.reduce((s,p)=>s+Number(p.amount||0),0))})
-- Ganancia vaper: ${money(vaperGain())} en ${state.vaperSales.length} ventas
-- Inventario vaper: ${state.vaperInventory.length} productos | Stock bajo: ${lowStock}
-- Ingresos barbería (completadas): ${money(barberIncome())} | Gastos: ${money(barberExpenseTotal())} | Neto: ${money(barberIncome()-barberExpenseTotal())}
-- Tareas completadas hoy: ${completedTasks()} de ${state.tasks.length}
+- Préstamos activos: ${state.loans.length} (por cobrar: ${money(totalLoanBalance())})
+- Morosos: ${state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora").map(l=>l.client+" ("+calcLateDays(l)+" días)").join(", ")||"Ninguno"}
+- Ganancia vaper: ${money(vaperGain())} en ${state.vaperSales.length} ventas | Stock bajo: ${lowStock}
+- Barbería: ${money(barberIncome())} ingresos, ${money(barberExpenseTotal())} gastos
+- Tareas hoy: ${completedTasks()} completadas de ${state.tasks.length}
 - XP: ${state.xp} — Rango: ${rank()}
-- Hábitos completados: ${state.habits.filter(h=>h.done).length} de ${state.habits.length}
-- Ganancias últimos 7 días: ${state.dailyRevenue.join(", ")} (RD$)
-Responde en español, de forma concisa y directa. Usa números reales. Sé proactivo con alertas y recomendaciones.`.trim();
+- Disciplina hoy: ${Math.round(state.habits.filter(h=>h.done).length/Math.max(1,state.habits.length)*100)}%
+Responde en español, conciso y directo. Usa los datos reales. Sé proactivo.`.trim();
+
+  /* Agregar mensaje del usuario al historial */
+  aiHistory.push({ role:"user", content:q });
+  renderAIChat();
+
+  /* Placeholder de respuesta */
+  const chatEl = document.getElementById("aiChatHistory");
+  const loadingEl = document.createElement("div");
+  loadingEl.style.cssText = "padding:10px 14px;border-radius:12px;background:var(--card2);border:1px solid var(--line);color:var(--muted);font-size:14px;margin-right:20px";
+  loadingEl.textContent = "🧠 Analizando...";
+  if (chatEl) chatEl.appendChild(loadingEl);
+
   try {
     const response=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:contexto,messages:[{role:"user",content:q}]})
+      body:JSON.stringify({
+        model:"claude-sonnet-4-6",
+        max_tokens:1000,
+        system:systemContext,
+        /* ✅ Enviar historial completo de conversación */
+        messages:aiHistory.map(m=>({role:m.role,content:m.content}))
+      })
     });
     const data=await response.json();
     const text=data.content?.map(b=>b.text||"").join("")||"Sin respuesta.";
-    res.innerHTML=text.replace(/\n/g,"<br>").replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>");
-  } catch { res.innerHTML=`<span style="color:var(--danger)">❌ Error al conectar con la IA.</span>`; }
+
+    /* Agregar respuesta al historial */
+    aiHistory.push({ role:"assistant", content:text });
+    if (loadingEl.parentNode) loadingEl.remove();
+    renderAIChat();
+  } catch(err) {
+    if (loadingEl.parentNode) loadingEl.remove();
+    aiHistory.push({ role:"assistant", content:"❌ Error al conectar. Verifica tu conexión." });
+    renderAIChat();
+  }
 }
 
 function resetData() {
   if (!confirm("¿Seguro que quieres reiniciar todos los datos? Esta acción no se puede deshacer.")) return;
   localStorage.removeItem(KEY);
   state=structuredClone(initialState);
-  pinUnlocked=true; saveState(); render();
+  pinUnlocked=true; aiHistory=[]; saveState(); render();
 }
 
 /* =====================================================================
@@ -1799,7 +2128,7 @@ function resetData() {
 })();
 
 /* =====================================================================
-   CLOCK & INIT
+   CLOCK, INIT & CHECKS
    ===================================================================== */
 setInterval(()=>{
   const c=document.getElementById("clock");
@@ -1807,4 +2136,8 @@ setInterval(()=>{
 },1000);
 
 document.body.classList.toggle("light-mode",!darkMode);
+
+/* ✅ Ejecutar checks al iniciar */
+checkDayReset();
+checkBackupReminder();
 render();
