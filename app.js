@@ -142,7 +142,25 @@ const initialState = {
   notifSettings: { loanOverdueDays: 3, lowStockDefault: 3 }
 };
 
-let state = loadState();
+let state = loadState(); // Carga local (rápido, sin esperar)
+
+// Carga desde Supabase en segundo plano y reconcilia
+(async () => {
+  const cloudState = await syncLoadState();
+  if (!cloudState) return; // Sin conexión o primera vez
+
+  // Compara timestamps para saber cuál es más reciente
+  const localDate = new Date(state.lastOpenDate || 0);
+  const cloudDate = new Date(cloudState.lastOpenDate || 0);
+
+  if (cloudDate > localDate) {
+    // La nube tiene datos más nuevos (ej: cambiaste en el celular)
+    state = { ...loadState(), ...cloudState }; // Merge con migraciones
+    localStorage.setItem(KEY, JSON.stringify(state));
+    render(); // Re-renderiza con datos de la nube
+    showToast('☁ Datos sincronizados desde la nube');
+  }
+})();
 let currentTab = "Inicio";
 let chartInstances = {};
 let calendarMonth = new Date().getMonth();
@@ -183,8 +201,11 @@ function loadState() {
     return base;
   } catch { return structuredClone(initialState); }
 }
-
-function saveState() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function saveState() {
+  const json = JSON.stringify(state);
+  localStorage.setItem(KEY, json);         // Cache local (instantáneo)
+  debouncedSave(state);                    // Nube con debounce
+}
 function setState(patch) { state = { ...state, ...patch }; saveState(); render(); }
 
 /* =====================================================================
