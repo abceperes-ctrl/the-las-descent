@@ -92,9 +92,12 @@ async function initSupabase() {
       // Remoto más reciente o igual → siempre descargar
       console.log('[Supabase] Descargando datos remotos...');
       const remoteData = data.data;
-      localStorage.setItem(KEY, JSON.stringify(remoteData));
-      if (typeof loadState === 'function') window.state = loadState();
-      if (typeof render === 'function') render();
+     localStorage.setItem(KEY, JSON.stringify(remoteData));
+if (typeof loadState === 'function') {
+  state = loadState();
+  window.state = state;
+}
+if (typeof render === 'function') render();
       showSyncBadge('☁ Sincronizado', '#22d468');
     } else {
       // Local más reciente → subir
