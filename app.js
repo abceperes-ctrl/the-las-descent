@@ -1,18 +1,6 @@
 /* =====================================================================
-   CEDANO BUSINESS — app.js v5.0
-   Mejoras v5:
-   ✅ Reset automático diario a medianoche
-   ✅ Morning Brief automático según hora del día
-   ✅ Historial de 90 días (era 7)
-   ✅ IA con historial de conversación en sesión
-   ✅ Notas rápidas flotantes desde cualquier pantalla
-   ✅ Modo Enfoque
-   ✅ Cierre nocturno automático a las 9PM
-   ✅ Racha real de hábitos basada en fechas reales
-   ✅ Flujo contacto → cliente préstamo automático
-   ✅ Bug fix: moneda en balances de préstamos USD
-   ✅ Service Worker para funcionamiento offline
-   ✅ Backup automático semanal con recordatorio
+   CEDANO BUSINESS — app.js v5.1
+   ✅ Supabase sync integrado
    ===================================================================== */
 
 const KEY = "CEDANO_V5";
@@ -142,25 +130,25 @@ const initialState = {
   notifSettings: { loanOverdueDays: 3, lowStockDefault: 3 }
 };
 
-let state = loadState(); // Carga local (rápido, sin esperar)
+/* ── Carga local primero (instantáneo) ── */
+let state = loadState();
 
-// Carga desde Supabase en segundo plano y reconcilia
+/* ── Luego reconcilia con Supabase en segundo plano ── */
 (async () => {
   const cloudState = await syncLoadState();
-  if (!cloudState) return; // Sin conexión o primera vez
+  if (!cloudState) return;
 
-  // Compara timestamps para saber cuál es más reciente
   const localDate = new Date(state.lastOpenDate || 0);
   const cloudDate = new Date(cloudState.lastOpenDate || 0);
 
   if (cloudDate > localDate) {
-    // La nube tiene datos más nuevos (ej: cambiaste en el celular)
-    state = { ...loadState(), ...cloudState }; // Merge con migraciones
+    state = { ...loadState(), ...cloudState };
     localStorage.setItem(KEY, JSON.stringify(state));
-    render(); // Re-renderiza con datos de la nube
+    render();
     showToast('☁ Datos sincronizados desde la nube');
   }
 })();
+
 let currentTab = "Inicio";
 let chartInstances = {};
 let calendarMonth = new Date().getMonth();
@@ -170,15 +158,11 @@ let darkMode = localStorage.getItem("CEDANO_THEME") !== "light";
 let editingId = null;
 let editingType = null;
 let focusModeActive = false;
-
-/* ── ✅ Historial de conversación IA en sesión ── */
 let aiHistory = [];
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
-    /* Migrar desde V4 */
-    const oldV4 = !saved ? null : saved;
     const oldV4Key = JSON.parse(localStorage.getItem("CEDANO_V4") || "null");
     const base = saved || oldV4Key || structuredClone(initialState);
 
@@ -191,9 +175,7 @@ function loadState() {
     if (!base.lastBackupDate) base.lastBackupDate = "";
     if (base.focusMode === undefined) base.focusMode = false;
 
-    /* ✅ Migrar hábitos: agregar lastDone si no existe */
     base.habits = base.habits.map(h => ({ lastDone: "", ...h }));
-    /* ✅ Migrar tareas: agregar completedAt si no existe */
     base.tasks = base.tasks.map(t => ({ completedAt: "", ...t }));
     base.vaperInventory = base.vaperInventory.map(p => ({ minStock: 3, ...p }));
     base.barberClients = base.barberClients.map(c => ({ cutNotes: "", ...c }));
@@ -201,21 +183,22 @@ function loadState() {
     return base;
   } catch { return structuredClone(initialState); }
 }
+
 function saveState() {
   const json = JSON.stringify(state);
-  localStorage.setItem(KEY, json);         // Cache local (instantáneo)
-  debouncedSave(state);                    // Nube con debounce
+  localStorage.setItem(KEY, json);   // Cache local (instantáneo)
+  debouncedSave(state);              // Nube con debounce
 }
+
 function setState(patch) { state = { ...state, ...patch }; saveState(); render(); }
 
 /* =====================================================================
-   ✅ RESET AUTOMÁTICO DIARIO
+   RESET DIARIO
    ===================================================================== */
 function checkDayReset() {
   const todayStr = today();
-  if (state.lastOpenDate === todayStr) return; /* Ya se abrió hoy */
+  if (state.lastOpenDate === todayStr) return;
 
-  /* Si hay datos de ayer, guardar en historial antes de limpiar */
   if (state.lastOpenDate && state.lastOpenDate !== todayStr) {
     const yesterday = {
       date: state.lastOpenDate,
@@ -229,33 +212,28 @@ function checkDayReset() {
       discipline: Math.round(state.habits.filter(h => h.done).length / Math.max(1, state.habits.length) * 100),
       status: state.moneyToday >= state.moneyGoal ? "Bueno" : "Regular"
     };
-    /* ✅ Historial de 90 días */
     state.history = [yesterday, ...state.history.filter(h => h.date !== yesterday.date)].slice(0, 90);
-    /* Agregar a gráfica diaria */
     state.dailyRevenue = [...state.dailyRevenue.slice(1), state.moneyToday];
   }
 
-  /* Reset campos del día */
   state.moneyToday = 0;
   state.moneySpent = 0;
   state.productiveHours = 0;
   state.dailyNote = "";
 
-  /* ✅ Reset hábitos con lógica de racha real */
   const todayDate = new Date(todayStr);
   state.habits = state.habits.map(h => {
     let newStreak = h.streak;
     if (h.done && h.lastDone) {
       const lastDate = new Date(h.lastDone);
       const diffDays = Math.round((todayDate - lastDate) / (1000*60*60*24));
-      if (diffDays > 1) newStreak = 0; /* Rompió la racha */
+      if (diffDays > 1) newStreak = 0;
     } else if (!h.done) {
-      newStreak = Math.max(0, h.streak - 1); /* No lo hizo ayer */
+      newStreak = Math.max(0, h.streak - 1);
     }
     return { ...h, done: false, streak: newStreak };
   });
 
-  /* Reset tareas diarias completadas */
   state.tasks = state.tasks.map(t => ({
     ...t,
     done: t.type !== "Diario" ? t.done : false,
@@ -267,10 +245,10 @@ function checkDayReset() {
 }
 
 /* =====================================================================
-   ✅ RECORDATORIO DE BACKUP SEMANAL
+   BACKUP REMINDER
    ===================================================================== */
 function checkBackupReminder() {
-  if (!state.lastBackupDate) return; /* Primera vez, no molestar */
+  if (!state.lastBackupDate) return;
   const last = new Date(state.lastBackupDate);
   const now = new Date();
   const diffDays = Math.round((now - last) / (1000*60*60*24));
@@ -282,7 +260,7 @@ function checkBackupReminder() {
 }
 
 /* =====================================================================
-   ✅ CIERRE NOCTURNO AUTOMÁTICO A LAS 9PM
+   CIERRE NOCTURNO AUTOMÁTICO
    ===================================================================== */
 function checkNightAlert() {
   const h = new Date().getHours();
@@ -310,7 +288,7 @@ function checkNightAlert() {
 }
 
 /* =====================================================================
-   CÁLCULOS BASE
+   CÁLCULOS
    ===================================================================== */
 function completedTasks() { return state.tasks.filter(t => t.done).length; }
 function pendingTasks() { return state.tasks.filter(t => !t.done).length; }
@@ -339,10 +317,7 @@ function loanBalance(loan) {
   const total = Number(loan.capital) + Number(loan.capital) * Number(loan.interest || 0) / 100;
   return Math.max(0, total - Number(loan.paid || 0));
 }
-/* ✅ Fix: balance en moneda correcta del préstamo */
-function loanBalanceMoney(loan) {
-  return money(loanBalance(loan), loan.currency || "RD$");
-}
+function loanBalanceMoney(loan) { return money(loanBalance(loan), loan.currency || "RD$"); }
 function totalLoanBalance() { return state.loans.reduce((s,l) => s + loanBalance(l), 0); }
 function vaperGain() { return state.vaperSales.reduce((s,sale) => s + Number(sale.gain || 0), 0); }
 function vaperInventoryValue() { return state.vaperInventory.reduce((s,p) => s + Number(p.quantity||0) * Number(p.cost||0), 0); }
@@ -367,14 +342,11 @@ function notifCount() {
 }
 
 /* =====================================================================
-   ✅ MORNING BRIEF — Panel inteligente según hora
+   MORNING BRIEF
    ===================================================================== */
 function getMorningBrief() {
   const h = new Date().getHours();
-  const cobrosHoy = state.loans.filter(l => {
-    if (!l.dueDate) return false;
-    return l.dueDate === today();
-  });
+  const cobrosHoy = state.loans.filter(l => l.dueDate === today());
   const citasHoy = state.barberAppointments.filter(a => a.date === today() && !a.completed);
   const mora = state.loans.filter(l => calcLateDays(l) > 0 || l.status === "En mora");
   const lowStock = state.vaperInventory.filter(p => Number(p.quantity) <= Number(p.minStock||3));
@@ -466,7 +438,6 @@ function rebuildDOM() {
   document.body.innerHTML = `
     <main class="app"><section id="screen"></section></main>
     <nav class="tabs" id="tabs" role="navigation" aria-label="Navegación principal"></nav>
-    <!-- Nota rápida flotante -->
     <button class="fab-note" onclick="openQuickNote()" aria-label="Nota rápida" title="Nota rápida">✏</button>
     <div class="modal" id="quickNoteModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2 style="color:var(--neon)">✏ Nota rápida</h2><button onclick="closeModal('quickNoteModal')">×</button></div><div id="quickNoteContent"></div></div></div>
     <div class="modal" id="searchModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🔍 Búsqueda global</h2><button onclick="closeModal('searchModal')">×</button></div><div id="searchContent"><input id="globalSearchInput" placeholder="Buscar..." oninput="runGlobalSearch(this.value)"/><div id="globalSearchResults" style="margin-top:12px"></div></div></div></div>
@@ -520,7 +491,7 @@ function closeModal(id) {
 }
 
 /* =====================================================================
-   ✅ NOTAS RÁPIDAS FLOTANTES
+   NOTAS RÁPIDAS
    ===================================================================== */
 function openQuickNote() {
   const el = document.getElementById("quickNoteContent");
@@ -543,25 +514,16 @@ function openQuickNote() {
   openModal("quickNoteModal");
   setTimeout(()=>document.getElementById("quickNoteText")?.focus(), 80);
 }
-
 function saveQuickNote() {
   const text = document.getElementById("quickNoteText")?.value.trim();
   if (!text) return;
   const now = new Date();
-  state.quickNotes.push({
-    id: uid(), text,
-    date: today(),
-    time: now.toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"})
-  });
-  saveState();
-  closeModal("quickNoteModal");
-  showToast("✅ Nota guardada");
+  state.quickNotes.push({ id:uid(), text, date:today(), time:now.toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"}) });
+  saveState(); closeModal("quickNoteModal"); showToast("✅ Nota guardada");
 }
-
 function deleteQuickNote(id) {
   state.quickNotes = state.quickNotes.filter(n => n.id !== id);
-  saveState();
-  openQuickNote();
+  saveState(); openQuickNote();
 }
 
 /* =====================================================================
@@ -572,11 +534,10 @@ const onboardSteps = [
   { icon:"☁", title:"Módulo Vaper", desc:"Controla tu inventario, registra ventas y recibe alertas cuando el stock está bajo." },
   { icon:"✂", title:"Módulo Barbería", desc:"Agenda citas, gestiona clientes frecuentes y registra ingresos al marcar citas como completadas." },
   { icon:"▥", title:"Reportes", desc:"Ve tus ganancias en gráficas, compara con el mes anterior y exporta reportes en CSV o PDF." },
-  { icon:"🧠", title:"IA Cedano", desc:"Presiona el ícono 🧠 en cualquier pantalla para preguntarle a la IA sobre tu negocio. Ahora recuerda la conversación." },
-  { icon:"✏", title:"Notas rápidas", desc:"El botón flotante ✏ en la esquina te deja anotar cualquier cosa al instante desde cualquier pantalla." }
+  { icon:"🧠", title:"IA Cedano", desc:"Presiona el ícono 🧠 en cualquier pantalla para preguntarle a la IA sobre tu negocio." },
+  { icon:"✏", title:"Notas rápidas", desc:"El botón flotante ✏ en la esquina te deja anotar cualquier cosa al instante." }
 ];
 let onboardStep = 0;
-
 function openOnboard() { onboardStep = 0; renderOnboardStep(); openModal("onboardModal"); }
 function renderOnboardStep() {
   const s = onboardSteps[onboardStep];
@@ -603,13 +564,11 @@ function closeOnboard() { state.onboardingDone = true; saveState(); closeModal("
    BÚSQUEDA GLOBAL
    ===================================================================== */
 function openSearch() { openModal("searchModal"); setTimeout(()=>document.getElementById("globalSearchInput")?.focus(), 80); }
-
 function runGlobalSearch(q) {
   const el = document.getElementById("globalSearchResults"); if (!el) return;
   if (!q || q.length < 2) { el.innerHTML = `<p class="muted" style="text-align:center;padding:14px">Escribe al menos 2 caracteres</p>`; return; }
   const ql = q.toLowerCase();
   const results = [];
-
   state.loanClients.filter(c => c.name.toLowerCase().includes(ql) || (c.phone||"").includes(ql))
     .forEach(c => results.push({ type:"👤 Cliente préstamo", title:c.name, sub:c.phone, action:`go('Préstamos')` }));
   state.loans.filter(l => l.client.toLowerCase().includes(ql))
@@ -624,7 +583,6 @@ function runGlobalSearch(q) {
     .forEach(p => results.push({ type:"☁ Producto vaper", title:p.product, sub:`Stock: ${p.quantity} · ${money(p.price)}`, action:`go('Vaper')` }));
   state.quickNotes.filter(n => n.text.toLowerCase().includes(ql))
     .forEach(n => results.push({ type:"✏ Nota", title:n.text.slice(0,50), sub:n.date, action:`openQuickNote()` }));
-
   if (!results.length) { el.innerHTML = `<div class="empty">Sin resultados para "${esc(q)}"</div>`; return; }
   el.innerHTML = results.slice(0,12).map(r => `
     <div class="list-item" onclick="closeModal('searchModal');${r.action}" style="cursor:pointer">
@@ -642,7 +600,6 @@ function render() {
   if (!document.getElementById("screen")) rebuildDOM();
   hideSkeleton(); destroyCharts(); renderTabs();
 
-  /* ✅ Modo enfoque */
   if (focusModeActive) {
     document.getElementById("screen").innerHTML = renderFocusMode();
     document.body.classList.toggle("light-mode", !darkMode);
@@ -663,13 +620,9 @@ function render() {
 }
 
 /* =====================================================================
-   ✅ MODO ENFOQUE
+   MODO ENFOQUE
    ===================================================================== */
-function toggleFocusMode() {
-  focusModeActive = !focusModeActive;
-  render();
-}
-
+function toggleFocusMode() { focusModeActive = !focusModeActive; render(); }
 function renderFocusMode() {
   const pendientes = state.tasks.filter(t => !t.done);
   const habitos = state.habits.filter(h => !h.done);
@@ -682,27 +635,22 @@ function renderFocusMode() {
         </div>
         <button class="small-btn warn" onclick="toggleFocusMode()">✕ Salir</button>
       </div>
-
       <div class="card" style="border-color:rgba(34,212,104,.6);margin-bottom:16px">
         <h3 class="title">🎯 Misión del día</h3>
-        <p style="font-size:18px;font-weight:700;color:var(--text)">${esc(state.mission||"Sin misión. Ve a Inicio y define una.")}</p>
+        <p style="font-size:18px;font-weight:700;color:var(--text)">${esc(state.mission||"Sin misión.")}</p>
         <div class="progress" style="margin-top:12px"><span id="moneyProgress" style="width:${progress()}%"></span></div>
         <p class="muted" style="font-size:13px;margin-top:6px">${money(state.moneyToday)} / ${money(state.moneyGoal)} — ${progress()}%</p>
       </div>
-
       ${pendientes.length ? `
       <div class="card" style="margin-bottom:16px">
         <h3 class="title">✅ Tareas pendientes (${pendientes.length})</h3>
         ${pendientes.map(t => `
           <div class="habit-item" onclick="toggleTask('${t.id}')" role="checkbox" aria-checked="false" tabindex="0">
             <div class="habit-check"></div>
-            <div>
-              <span style="font-weight:700">${esc(t.text)}</span>
-              <span class="pill ${t.priority==="Urgente"?"danger":t.priority==="Alta"?"warn":"green"}" style="margin-left:8px">${t.priority}</span>
-            </div>
+            <div><span style="font-weight:700">${esc(t.text)}</span>
+            <span class="pill ${t.priority==="Urgente"?"danger":t.priority==="Alta"?"warn":"green"}" style="margin-left:8px">${t.priority}</span></div>
           </div>`).join("")}
       </div>` : `<div class="card" style="text-align:center;padding:20px;margin-bottom:16px"><p style="color:var(--neon);font-size:18px;font-weight:900">✅ Sin tareas pendientes</p></div>`}
-
       ${habitos.length ? `
       <div class="card">
         <h3 class="title">🌅 Hábitos pendientes (${habitos.length})</h3>
@@ -733,7 +681,7 @@ function toggleTheme() {
 }
 
 /* =====================================================================
-   HOME con Morning Brief
+   HOME
    ===================================================================== */
 function renderHome() {
   const brief = getMorningBrief();
@@ -748,8 +696,6 @@ function renderHome() {
 
   return `
     ${header()}
-
-    <!-- ✅ Morning Brief -->
     <div class="morning-brief">
       <div class="brief-header">
         <div>
@@ -762,7 +708,6 @@ function renderHome() {
         ${brief.items.map(item => `<div class="brief-item">${item}</div>`).join("")}
       </div>
     </div>
-
     <section class="card capital"><div><p class="label">Capital en efectivo</p><p class="big-money">${money(state.capital)}</p></div><span class="muted">›</span></section>
     <h2 class="section-title">📊 Panel de Hoy</h2>
     <section class="grid-3">
@@ -770,12 +715,10 @@ function renderHome() {
       ${metric("📅","Citas barbería",todayCitas,"Hoy")}
       ${metric("⏰","Tiempo libre",hLeft+"h","Estimado")}
     </section>
-
     ${lowStockItems.length?`<div class="card alert-card warn-card">
       <p class="title" style="color:var(--warn)">⚠ Stock bajo — reponer pronto</p>
       ${lowStockItems.map(p=>`<p class="pill warn">☁ ${esc(p.product)} — ${p.quantity}/${p.minStock} uds.</p>`).join("")}
     </div>`:""}
-
     ${overdueAlert.length?`<div class="card alert-card danger-card">
       <p class="title" style="color:var(--danger)">🔴 Cobros urgentes (≥${state.notifSettings?.loanOverdueDays||3} días)</p>
       ${overdueAlert.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:8px 0">
@@ -783,23 +726,16 @@ function renderHome() {
         <button class="small-btn green" onclick="whatsappLoan('${l.id}')">WA</button>
       </div>`).join("")}
     </div>`:""}
-
     ${card("🎯 Misión del día",`<p>${esc(state.mission||"Sin misión establecida")}</p>${inp("missionInput","Ej: Conseguir 3 clientes")}<div class="row" style="margin-top:8px">${btn("Guardar","saveMission()")}${btn("✔ Completar (+50 XP)","completeMission()","secondary")}</div>`)}
-
     ${card("💰 Meta diaria",`<p class="big-money">${money(state.moneyGoal)}</p><p>Generado: ${money(state.moneyToday)}</p><div class="progress"><span id="moneyProgress"></span></div><p class="green">${progress()}% completado — faltan ${money(missing)}</p>${inp("goalInput","Meta RD$","number")}${inp("todayMoneyInput","Dinero generado hoy","number")}${btn("Guardar","saveMoney()")}`)}
-
     <section class="grid">
       ${metric("⚔","XP",state.xp,"Puntos")}${metric("🏆","Rango",rank(),"Sigue avanzando")}
       ${metric("🎯","Pendientes",pendingTasks(),"Tareas")}${metric("📌","Seguimientos",state.contacts.length,"Activos")}
     </section>
-
     ${card("📖 Verso del Día",`<p><em>Porque yo sé los planes que tengo para vosotros.</em></p><p class="green">Jeremías 29:11</p>`)}
-
     <h2 class="section-title">Módulos</h2>
     ${["💰,Préstamos,Clientes préstamos y cobros.,Préstamos","☁,Vaper,Inventario y ventas.,Vaper","✂,Barbería,Agenda y clientes.,Barbería","▥,Reportes,Ganancias y estado general.,Reportes","⚑,Productividad,Metas hábitos y XP.,Mi Día","♛,Mi Imperio,Patrimonio y crecimiento.,Imperio"].map(s=>{const[ic,nm,dc,tb]=s.split(",");return`<div class="module" onclick="go('${tb}')"><div class="module-icon">${ic}</div><div><strong>${nm}</strong><small>${dc}</small></div><div class="arrow">›</div></div>`;}).join("")}
-
     ${card("🧠 Resumen IA",`<p class="pill green">Faltan ${money(missing)} para cumplir tu meta.</p><p class="pill ${mora?"danger":"green"}">${mora} clientes en mora.</p><p class="pill warn">${pendingC} personas pendientes por contactar.</p><p class="pill green">Completaste el ${taskPct}% de tus tareas.</p><p class="pill">Balance en préstamos: ${money(totalLoanBalance())}</p><p class="pill blue">Patrimonio total: ${money(patrimonyTotal())}</p>${btn("Abrir IA completa","openAI()","secondary")}`)}
-
     <h2 class="section-title">Accesos rápidos</h2>
     <section class="quick-grid">
       ${[["👥","Clientes","Préstamos"],["☁","Vaper","Vaper"],["✂","Barbería","Barbería"],["▥","Reportes","Reportes"],["⚑","Metas","Mi Día"],["$","Finanzas","Reportes"],["📅","Agenda","Mi Día"],["♛","Imperio","Imperio"]].map(([ic,nm,tb])=>`<button class="quick" onclick="go('${tb}')"><span>${ic}</span><small>${nm}</small></button>`).join("")}
@@ -818,7 +754,6 @@ function renderMyDay() {
       <p class="muted" style="font-size:13px">Disciplina hoy: <strong style="color:var(--neon)">${disciplineToday}%</strong></p>
       <button class="small-btn green" onclick="toggleFocusMode()">⚡ Modo Enfoque</button>
     </div>
-
     ${card("🌅 Hábitos de hoy", state.habits.map(h=>`
       <div class="habit-item ${h.done?"done":""}" onclick="toggleHabit('${h.id}')" role="checkbox" aria-checked="${h.done}" tabindex="0">
         <div class="habit-check">${h.done?"✓":""}</div>
@@ -829,21 +764,18 @@ function renderMyDay() {
         <span class="pill green" style="margin-left:auto">${h.streak}🔥</span>
         ${sm("🗑","deleteHabit('"+h.id+"')","red")}
       </div>`).join("")+inp("newHabitInput","Agregar hábito")+btn("Agregar hábito","addHabit()"))}
-
     ${card("📊 Estadísticas personales",`
       <div class="grid-3">
         <div class="card metric"><div class="title">🏋 Gym</div><div class="value">${state.habitStats.daysTraining}</div><div class="muted">días seguidos</div></div>
         <div class="card metric"><div class="title">🎯 Metas</div><div class="value">${state.habitStats.daysMeta}</div><div class="muted">días cumplidos</div></div>
         <div class="card metric"><div class="title">😴 Sueño</div><div class="value">${state.habitStats.avgSleep}h</div><div class="muted">promedio</div></div>
       </div>`)}
-
     ${card("✅ Tareas del día",`
       ${inp("taskText","Ej: Cobrar a Pedro")}
       <div class="row">${sel("taskType",["Diario","Semanal","Mensual"],"Diario")}${sel("taskPriority",["Baja","Media","Alta","Urgente"],"Media")}</div>
       <div class="row">${inp("taskDate","Fecha")}${inp("taskTime","Hora")}</div>
       ${btn("Agregar tarea","addTask()")}
       <div style="margin-top:12px">${state.tasks.length?state.tasks.map(taskHTML).join(""):`<div class="empty">No hay tareas.</div>`}</div>`)}
-
     ${card("📅 Planificar Mañana",`
       ${inp("tomorrowMission","Misión principal mañana","text",state.tomorrow.mission)}
       ${inp("tomorrowGoal","Meta de dinero mañana","number",state.tomorrow.moneyGoal)}
@@ -1024,7 +956,6 @@ function contactHTML(c) {
     <div class="row" style="margin-top:10px">
       ${sm("📞 Llamar","callContact('"+c.id+"')","")}
       ${sm("💬 WhatsApp","whatsappCobro('"+c.id+"')","")}
-      <!-- ✅ Convertir contacto a cliente de préstamo en un clic -->
       ${c.status!=="Convertido"?sm("➕ Crear cliente","convertContact('"+c.id+"')","green"):""}
       ${sm("🗑","deleteContact('"+c.id+"')","red")}
     </div>
@@ -1033,16 +964,11 @@ function contactHTML(c) {
   </article>`;
 }
 
-/* ✅ Convertir contacto a cliente de préstamo automáticamente */
 function convertContact(id) {
   const c = state.contacts.find(x=>x.id===id); if (!c) return;
   const exists = state.loanClients.find(l=>l.name.toLowerCase()===c.name.toLowerCase());
   if (exists) { showToast("Este contacto ya es cliente de préstamo"); return; }
-  state.loanClients.push({
-    id: uid(), name: c.name, photo: "", cedula: "",
-    phone: c.phone||"", address: c.address||"",
-    reference: c.source||"", notes: c.note||"", lastVisit: today()
-  });
+  state.loanClients.push({ id:uid(), name:c.name, photo:"", cedula:"", phone:c.phone||"", address:c.address||"", reference:c.source||"", notes:c.note||"", lastVisit:today() });
   state.contacts = state.contacts.map(x=>x.id===id?{...x,status:"Convertido"}:x);
   saveState(); render();
   showToast(`✅ ${c.name} añadido como cliente de préstamos`);
@@ -1103,7 +1029,7 @@ function whatsappCobro(contactId) {
 }
 function whatsappLoan(loanId) {
   const l = state.loans.find(x=>x.id===loanId); if (!l) return;
-  const balance = loanBalance(l); const lateDays = calcLateDays(l);
+  const lateDays = calcLateDays(l);
   const msg = `Hola ${l.client}, tienes un pago pendiente de *${loanBalanceMoney(l)}* en Cedano Business.${lateDays>0?` Llevas *${lateDays} días de atraso*.`:""} Por favor realiza tu pago. Gracias 🙏`;
   const client = state.loanClients.find(c=>c.name.toLowerCase()===l.client.toLowerCase());
   window.open(`https://wa.me/${(client?.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
@@ -1378,7 +1304,6 @@ function saveNotifSettings() {
 }
 
 function printReport() {
-  const mora = state.loans.filter(l=>calcLateDays(l)>0||l.status==="En mora");
   const win = window.open("","_blank","width=800,height=900");
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte Cedano Business</title>
   <style>body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:780px;margin:0 auto}h1{color:#0a7a34;border-bottom:2px solid #0a7a34;padding-bottom:10px}h2{color:#0a7a34;margin-top:24px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}th{background:#0a7a34;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #ddd}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}.metric{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center}.metric .val{font-size:22px;font-weight:900;color:#0a7a34}.footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;text-align:center}</style></head><body>
@@ -1397,7 +1322,7 @@ function printReport() {
   <table><thead><tr><th>Producto</th><th>Stock</th><th>Costo</th><th>Venta</th></tr></thead><tbody>
     ${state.vaperInventory.map(p=>`<tr><td>${esc(p.product)}</td><td>${p.quantity}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td></tr>`).join("")}
   </tbody></table>
-  <div class="footer">Cedano Business — v5.0</div></body></html>`);
+  <div class="footer">Cedano Business — v5.1</div></body></html>`);
   win.document.close(); setTimeout(()=>win.print(),500);
 }
 
@@ -1517,7 +1442,6 @@ function renderImperio() {
   const xpPct = Math.min(100,Math.round(state.xp/nextRankXP()*100));
   const habitsCompleted = state.habits.filter(h=>h.done).length;
   const discipline = Math.round(habitsCompleted/Math.max(1,state.habits.length)*100);
-  /* ✅ Estadísticas de historial de 90 días */
   const hist90 = state.history.slice(0,90);
   const bestDay = hist90.length ? hist90.reduce((best,d) => Number(d.moneyToday)>Number(best.moneyToday)?d:best, hist90[0]) : null;
   const avgMoney = hist90.length ? hist90.reduce((s,d)=>s+Number(d.moneyToday||0),0)/hist90.length : 0;
@@ -1763,7 +1687,6 @@ function saveProfile() {
   });
   showToast("✅ Configuración guardada");
 }
-
 function addHabit() {
   const t=document.getElementById("newHabitInput")?.value.trim(); if (!t) return;
   state.habits.push({id:uid(),text:t,done:false,streak:0,lastDone:""});
@@ -1774,12 +1697,7 @@ function toggleHabit(id) {
     if (h.id!==id) return h;
     const done=!h.done;
     if (done) state.xp+=5;
-    /* ✅ Racha real: guardar fecha de cuando se completó */
-    return {
-      ...h, done,
-      streak: done ? h.streak+1 : Math.max(0,h.streak-1),
-      lastDone: done ? today() : h.lastDone
-    };
+    return { ...h, done, streak: done ? h.streak+1 : Math.max(0,h.streak-1), lastDone: done ? today() : h.lastDone };
   });
   saveState(); render();
 }
@@ -1845,7 +1763,6 @@ function updateContactStatus(id) { setContactStatus(id,document.getElementById("
 function setContactStatus(id,status) { state.contacts=state.contacts.map(c=>c.id===id?{...c,status}:c); saveState(); render(); }
 function callContact(id) { const c=state.contacts.find(c=>c.id===id); if(c) alert(`Llamar a ${c.name}: ${c.phone||"Sin teléfono"}`); }
 function deleteContact(id) { state.contacts=state.contacts.filter(c=>c.id!==id); saveState(); render(); }
-
 function addLoan() {
   const client=document.getElementById("loanClient")?.value.trim();
   const capital=Number(document.getElementById("loanCapital")?.value);
@@ -1887,7 +1804,6 @@ function addPayment() {
   }
   saveState(); render(); showToast(`✅ Pago de ${money(amount)} registrado`);
 }
-
 function addVaperProduct() {
   const product=document.getElementById("vpProduct")?.value.trim(); if (!product) return;
   state.vaperInventory.push({
@@ -1904,7 +1820,6 @@ function addVaperProduct() {
   saveState(); render(); showToast("✅ Producto agregado");
 }
 function addVaperSale() {
-  /* ✅ Fix: usa select en lugar de texto libre */
   const productName=document.getElementById("saleProduct")?.value; if (!productName) { showToast("❌ Selecciona un producto","err"); return; }
   const item=state.vaperInventory.find(p=>p.product===productName);
   const qty=Number(document.getElementById("saleQty")?.value||1);
@@ -2022,7 +1937,6 @@ function saveNightSummary() {
     discipline,
     status:reached&&pending===0?"Excelente":reached?"Bueno":pending<=2?"Regular":"Malo"
   };
-  /* ✅ Historial de 90 días */
   state.history=[day,...state.history.filter(h=>h.date!==day.date)].slice(0,90);
   state.xp+=completed*10+checks*5;
   state.disciplineScore=discipline;
@@ -2035,41 +1949,33 @@ function saveNightSummary() {
 function closeDetail() { closeModal("detailModal"); }
 
 /* =====================================================================
-   ✅ IA CON HISTORIAL DE CONVERSACIÓN
+   IA
    ===================================================================== */
 function openAI() { openModal("aiModal"); renderAIChat(); }
 function closeAI() { closeModal("aiModal"); }
-function askAI(q) {
-  const input = document.getElementById("aiInput");
-  if (input) input.value = q;
-  runAI();
-}
+function askAI(q) { const input=document.getElementById("aiInput"); if(input) input.value=q; runAI(); }
 function clearAIHistory() {
-  aiHistory = [];
-  const el = document.getElementById("aiChatHistory");
-  if (el) el.innerHTML = "";
+  aiHistory=[];
+  const el=document.getElementById("aiChatHistory");
+  if(el) el.innerHTML="";
   showToast("🗑 Chat limpiado");
 }
-
 function renderAIChat() {
-  const el = document.getElementById("aiChatHistory");
-  if (!el || !aiHistory.length) return;
-  el.innerHTML = aiHistory.map(m => `
-    <div style="
-      padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;
+  const el=document.getElementById("aiChatHistory");
+  if(!el||!aiHistory.length) return;
+  el.innerHTML=aiHistory.map(m=>`
+    <div style="padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6;
       ${m.role==="user"
-        ? "background:rgba(34,212,104,.1);border:1px solid rgba(34,212,104,.3);color:var(--text);margin-left:20px"
-        : "background:var(--card2);border:1px solid var(--line);color:var(--text);margin-right:20px"}">
+        ?"background:rgba(34,212,104,.1);border:1px solid rgba(34,212,104,.3);color:var(--text);margin-left:20px"
+        :"background:var(--card2);border:1px solid var(--line);color:var(--text);margin-right:20px"}">
       <p style="font-size:11px;color:var(--muted);margin-bottom:4px">${m.role==="user"?"Tú":"🧠 IA"}</p>
       ${m.content.replace(/\n/g,"<br>").replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>")}
     </div>`).join("");
-  el.scrollTop = el.scrollHeight;
+  el.scrollTop=el.scrollHeight;
 }
-
 async function runAI() {
-  const q=(document.getElementById("aiInput")?.value||"").trim(); if (!q) return;
-  document.getElementById("aiInput").value = "";
-
+  const q=(document.getElementById("aiInput")?.value||"").trim(); if(!q) return;
+  document.getElementById("aiInput").value="";
   const lowStock=state.vaperInventory.filter(p=>Number(p.quantity)<=Number(p.minStock||3)).map(p=>p.product).join(", ")||"Ninguno";
   const systemContext=`Eres el asistente financiero personal de ${state.userName}, dueño de Cedano Business.
 Datos actuales (${today()}):
@@ -2085,16 +1991,13 @@ Datos actuales (${today()}):
 - Disciplina hoy: ${Math.round(state.habits.filter(h=>h.done).length/Math.max(1,state.habits.length)*100)}%
 Responde en español, conciso y directo. Usa los datos reales. Sé proactivo.`.trim();
 
-  /* Agregar mensaje del usuario al historial */
-  aiHistory.push({ role:"user", content:q });
+  aiHistory.push({role:"user",content:q});
   renderAIChat();
-
-  /* Placeholder de respuesta */
-  const chatEl = document.getElementById("aiChatHistory");
-  const loadingEl = document.createElement("div");
-  loadingEl.style.cssText = "padding:10px 14px;border-radius:12px;background:var(--card2);border:1px solid var(--line);color:var(--muted);font-size:14px;margin-right:20px";
-  loadingEl.textContent = "🧠 Analizando...";
-  if (chatEl) chatEl.appendChild(loadingEl);
+  const chatEl=document.getElementById("aiChatHistory");
+  const loadingEl=document.createElement("div");
+  loadingEl.style.cssText="padding:10px 14px;border-radius:12px;background:var(--card2);border:1px solid var(--line);color:var(--muted);font-size:14px;margin-right:20px";
+  loadingEl.textContent="🧠 Analizando...";
+  if(chatEl) chatEl.appendChild(loadingEl);
 
   try {
     const response=await fetch("https://api.anthropic.com/v1/messages",{
@@ -2104,33 +2007,30 @@ Responde en español, conciso y directo. Usa los datos reales. Sé proactivo.`.t
         model:"claude-sonnet-4-6",
         max_tokens:1000,
         system:systemContext,
-        /* ✅ Enviar historial completo de conversación */
         messages:aiHistory.map(m=>({role:m.role,content:m.content}))
       })
     });
     const data=await response.json();
     const text=data.content?.map(b=>b.text||"").join("")||"Sin respuesta.";
-
-    /* Agregar respuesta al historial */
-    aiHistory.push({ role:"assistant", content:text });
-    if (loadingEl.parentNode) loadingEl.remove();
+    aiHistory.push({role:"assistant",content:text});
+    if(loadingEl.parentNode) loadingEl.remove();
     renderAIChat();
   } catch(err) {
-    if (loadingEl.parentNode) loadingEl.remove();
-    aiHistory.push({ role:"assistant", content:"❌ Error al conectar. Verifica tu conexión." });
+    if(loadingEl.parentNode) loadingEl.remove();
+    aiHistory.push({role:"assistant",content:"❌ Error al conectar. Verifica tu conexión."});
     renderAIChat();
   }
 }
 
 function resetData() {
-  if (!confirm("¿Seguro que quieres reiniciar todos los datos? Esta acción no se puede deshacer.")) return;
+  if(!confirm("¿Seguro que quieres reiniciar todos los datos?")) return;
   localStorage.removeItem(KEY);
   state=structuredClone(initialState);
   pinUnlocked=true; aiHistory=[]; saveState(); render();
 }
 
 /* =====================================================================
-   SKELETON CSS
+   SKELETON
    ===================================================================== */
 (function injectSkeletonStyle() {
   const style=document.createElement("style");
@@ -2149,16 +2049,14 @@ function resetData() {
 })();
 
 /* =====================================================================
-   CLOCK, INIT & CHECKS
+   INIT
    ===================================================================== */
 setInterval(()=>{
   const c=document.getElementById("clock");
-  if (c) c.textContent=new Date().toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"});
+  if(c) c.textContent=new Date().toLocaleTimeString("es-DO",{hour:"2-digit",minute:"2-digit"});
 },1000);
 
 document.body.classList.toggle("light-mode",!darkMode);
-
-/* ✅ Ejecutar checks al iniciar */
 checkDayReset();
 checkBackupReminder();
 render();
