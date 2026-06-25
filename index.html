@@ -1,154 +1,57 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)"/>
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"/>
-  <meta name="description" content="Panel de negocios Cedano — préstamos, barbería y vaper"/>
-  <meta name="author" content="Cedano Business"/>
-  <meta property="og:title" content="Cedano Business"/>
-  <meta property="og:description" content="Panel de control de negocios: préstamos, barbería, vaper y más."/>
-  <meta property="og:type" content="website"/>
-  <link rel="manifest" href="manifest.json"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+  <meta name="theme-color" content="#0b1012"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-title" content="Cedano"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <link rel="apple-touch-icon" href="icon-192.png"/>
-  <title>Cedano Business</title>
-  <link rel="preload" href="styles.css" as="style" onload="this.rel='stylesheet'"/>
-  <link rel="stylesheet" href="styles.css"/>
-  <noscript><link rel="stylesheet" href="styles.css"/></noscript>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <title>Cedano Business v6</title>
+  <link rel="stylesheet" href="style.css"/>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <!-- Supabase JS v2 — CDN oficial correcto -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!-- Credenciales — NO subir a GitHub -->
+  <script src="config.js"></script>
 </head>
 <body>
 
-<main class="app">
-  <section id="screen">
-    <div class="skeleton-loader" id="skeletonLoader" aria-hidden="true">
-      <div class="skel-topbar"></div>
-      <div class="skel-hero"></div>
-      <div class="skel-row">
-        <div class="skel-card"></div>
-        <div class="skel-card"></div>
-        <div class="skel-card"></div>
-      </div>
-      <div class="skel-block"></div>
-      <div class="skel-block short"></div>
-    </div>
-  </section>
-</main>
-
-<nav class="tabs" id="tabs" role="navigation" aria-label="Navegación principal"></nav>
-
-<!-- BÚSQUEDA GLOBAL -->
-<div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchTitle">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="searchTitle">🔍 Búsqueda global</h2>
-      <button onclick="closeModal('searchModal')" aria-label="Cerrar">×</button>
-    </div>
-    <div id="searchContent">
-      <input id="globalSearchInput" placeholder="Buscar clientes, préstamos, citas..." aria-label="Búsqueda global" oninput="runGlobalSearch(this.value)"/>
-      <div id="globalSearchResults" style="margin-top:12px"></div>
-    </div>
+<!-- Skeleton loader mientras carga -->
+<div id="skeletonLoader" class="app" style="padding:14px">
+  <div style="height:50px;background:var(--card);border-radius:10px;margin-bottom:16px;animation:shimmer 1.4s infinite"></div>
+  <div style="height:90px;background:var(--card);border-radius:14px;margin-bottom:12px;animation:shimmer 1.4s infinite .1s"></div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .15s"></div>
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .2s"></div>
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .25s"></div>
   </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .3s"></div>
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .35s"></div>
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .4s"></div>
+    <div style="height:72px;background:var(--card);border-radius:10px;animation:shimmer 1.4s infinite .45s"></div>
+  </div>
+  <div style="height:110px;background:var(--card);border-radius:14px;animation:shimmer 1.4s infinite .5s"></div>
 </div>
 
-<!-- Modal: Cierre Nocturno -->
-<div class="modal" id="nightModal" role="dialog" aria-modal="true" aria-labelledby="nightModalTitle">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="nightModalTitle">🌙 Cierre Nocturno</h2>
-      <button onclick="closeNightSummary()" aria-label="Cerrar modal">×</button>
-    </div>
-    <div id="nightContent"></div>
-  </div>
-</div>
-
-<!-- Modal: Editar -->
-<div class="modal" id="editModal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="editTitle">Editar</h2>
-      <button onclick="closeEditModal()" aria-label="Cerrar modal">×</button>
-    </div>
-    <div id="editContent"></div>
-  </div>
-</div>
-
-<!-- Modal: Detalle -->
-<div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="detailTitle">Detalle</h2>
-      <button onclick="closeDetail()" aria-label="Cerrar modal">×</button>
-    </div>
-    <div id="detailContent"></div>
-  </div>
-</div>
-
-<!-- Modal: IA -->
-<div class="modal" id="aiModal" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="aiModalTitle">🧠 IA Cedano</h2>
-      <button onclick="closeAI()" aria-label="Cerrar modal">×</button>
-    </div>
-    <div id="aiContent">
-      <input id="aiInput" placeholder="Ej: ¿Cuánto gané esta semana?" aria-label="Pregunta para la IA"/>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px">
-        <button class="small-btn green" onclick="askAI('¿Cuánto gané esta semana?')">Esta semana</button>
-        <button class="small-btn green" onclick="askAI('¿Quiénes debo cobrar hoy?')">Cobrar hoy</button>
-        <button class="small-btn green" onclick="askAI('¿Qué negocio está creciendo más?')">Mayor crecimiento</button>
-        <button class="small-btn warn" onclick="askAI('¿Cuánto debo producir hoy para llegar a mi meta mensual?')">Meta mensual</button>
-        <button class="small-btn" onclick="askAI('Resumen de patrimonio total')">Patrimonio</button>
-        <button class="small-btn" onclick="askAI('¿Qué productos vaper debo reponer esta semana?')">Reponer stock</button>
-        <button class="small-btn blue" onclick="askAI('Dame consejos para crecer mis préstamos este mes')">Consejos</button>
-        <button class="small-btn blue" onclick="askAI('¿Cómo está mi disciplina y hábitos esta semana?')">Mi disciplina</button>
-      </div>
-      <button class="btn" style="margin-top:10px" onclick="runAI()">Preguntar ›</button>
-      <div id="aiChatHistory" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: Historial de pagos -->
-<div class="modal" id="payHistModal" role="dialog" aria-modal="true" aria-labelledby="payHistTitle">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="payHistTitle">💳 Historial de pagos</h2>
-      <button onclick="closeModal('payHistModal')" aria-label="Cerrar">×</button>
-    </div>
-    <div id="payHistContent"></div>
-  </div>
-</div>
-
-<!-- Modal: Onboarding -->
-<div class="modal" id="onboardModal" role="dialog" aria-modal="true" aria-labelledby="onboardTitle" style="z-index:60">
-  <div class="modal-inner">
-    <div class="modal-head">
-      <h2 id="onboardTitle">👋 Bienvenido a Cedano Business</h2>
-      <button onclick="closeOnboard()" aria-label="Cerrar">×</button>
-    </div>
-    <div id="onboardContent"></div>
-  </div>
-</div>
-
-<!-- 1. Supabase SDK -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<!-- 2. Keys de Supabase -->
-<script>
-window.SUPABASE_URL = "https://eewamzuczcbhuvyiil.supabase.co";
-window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVldmFtenFjdWNiemNycWhxdmxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzMDIyNDIsImV4cCI6MjA5Nzg3ODI0Mn0.vQ_Z60CeYcBVb2rGbs1ocpZXksot1aWhWJcOY_oYUPM';
-</script>
-
-<!-- 3. Módulo de sincronización -->
+<!--
+  ORDEN DE CARGA IMPORTANTE:
+  1. config.js        → window.SUPABASE_URL y window.SUPABASE_ANON_KEY
+  2. supabase-sync.js → showSyncBadge() e initSupabase()
+  3. app.js           → lógica principal
+-->
 <script src="supabase-sync.js"></script>
-
-<!-- 4. Chart.js y App -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="app.js" defer></script>
+<script src="app.js"></script>
 
 </body>
 </html>

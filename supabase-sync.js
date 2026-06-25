@@ -1,144 +1,137 @@
-// supabase-sync.js — Cedano Business
-// localStorage = cache rápido | Supabase = nube
+// supabase-sync.js — CORREGIDO para Supabase JS v2
+// Define showSyncBadge() e initSupabase()
+// Debe cargarse ANTES de app.js
 
-const SUPABASE_USER = 'royer';
-let _sb = null;
-
-function initSupabase() {
-  if (_sb) return _sb;
-  if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
-    console.warn('[Cedano] Supabase no configurado.');
-    return null;
-  }
-  _sb = {
-    url: window.SUPABASE_URL,
-    key: window.SUPABASE_ANON_KEY
-  };
-  return _sb;
-}
-
-// ── Guardar estado en Supabase ──────────────────────────────
-async function syncSaveState(stateObj) {
-  const sb = initSupabase();
-  if (!sb) return;
-
-  try {
-    const res = await fetch(`${sb.url}/rest/v1/cedano_state`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': sb.key,
-        'Authorization': `Bearer ${sb.key}`,
-        'Prefer': 'resolution=merge-duplicates,return=minimal'
-      },
-      body: JSON.stringify({
-        id: SUPABASE_USER,
-        data: stateObj,
-        updated_at: new Date().toISOString()
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('[Cedano] Error guardando en Supabase:', err);
-      showSyncIndicator('offline');
-    }
-  } catch (e) {
-    console.warn('[Cedano] Sin conexión. Solo localStorage.');
-    showSyncIndicator('offline');
-  }
-}
-
-// ── Cargar estado desde Supabase ────────────────────────────
-async function syncLoadState() {
-  const sb = initSupabase();
-  if (!sb) return null;
-
-  try {
-    const res = await fetch(
-      `${sb.url}/rest/v1/cedano_state?id=eq.${SUPABASE_USER}&select=data,updated_at`,
-      {
-        headers: {
-          'apikey': sb.key,
-          'Authorization': `Bearer ${sb.key}`
-        }
-      }
-    );
-
-    if (!res.ok) return null;
-    const rows = await res.json();
-    if (!rows || rows.length === 0) return null;
-    return rows[0].data;
-  } catch (e) {
-    console.warn('[Cedano] No se pudo cargar desde Supabase.');
-    return null;
-  }
-}
-
-// ── Indicador visual de sincronización ─────────────────────
-function showSyncIndicator(status) {
-  let el = document.getElementById('sync-indicator');
+/* ── Badge de sincronización ── */
+function showSyncBadge(msg, color) {
+  let el = document.getElementById('cedano-sync');
   if (!el) {
     el = document.createElement('div');
-    el.id = 'sync-indicator';
+    el.id = 'cedano-sync';
     el.style.cssText = [
-      'position:fixed',
-      'top:12px',
-      'right:12px',
-      'z-index:9998',
-      'padding:4px 12px',
-      'border-radius:999px',
-      'font-size:11px',
-      'font-weight:800',
-      'transition:opacity .6s',
-      'pointer-events:none'
+      'position:fixed','top:10px','left:50%','transform:translateX(-50%)',
+      'padding:4px 14px','border-radius:20px','font-size:11px',
+      'font-weight:700','z-index:9999','pointer-events:none',
+      'transition:opacity .4s','white-space:nowrap',
+      'box-shadow:0 2px 12px rgba(0,0,0,.3)'
     ].join(';');
     document.body.appendChild(el);
   }
-
-  // Resetea estilos inline acumulados
-  el.removeAttribute('style');
-  el.style.cssText = [
-    'position:fixed',
-    'top:12px',
-    'right:12px',
-    'z-index:9998',
-    'padding:4px 12px',
-    'border-radius:999px',
-    'font-size:11px',
-    'font-weight:800',
-    'transition:opacity .6s',
-    'pointer-events:none',
-    'opacity:1'
-  ].join(';');
-
-  if (status === 'saving') {
-    el.style.background = 'rgba(255,204,77,.15)';
-    el.style.color = '#ffcc4d';
-    el.style.border = '1px solid rgba(255,204,77,.4)';
-    el.textContent = '↑ Sincronizando...';
-  } else if (status === 'saved') {
-    el.style.background = 'rgba(34,212,104,.12)';
-    el.style.color = '#22d468';
-    el.style.border = '1px solid rgba(34,212,104,.3)';
-    el.textContent = '✓ Sincronizado';
-    setTimeout(() => { el.style.opacity = '0'; }, 2000);
-  } else if (status === 'offline') {
-    el.style.background = 'rgba(255,77,94,.1)';
-    el.style.color = '#ff4d5e';
-    el.style.border = '1px solid rgba(255,77,94,.3)';
-    el.textContent = '⚡ Sin conexión';
-    setTimeout(() => { el.style.opacity = '0'; }, 3000);
-  }
+  el.textContent = msg;
+  el.style.background = color;
+  el.style.color = (color === '#ff4d5e' || color === '#ffcc4d') ? (color === '#ffcc4d' ? '#000' : '#fff') : '#000';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 3000);
 }
 
-// ── Debounce: guarda 1.5s después del último cambio ────────
-let _syncTimer = null;
-function debouncedSave(stateObj) {
-  clearTimeout(_syncTimer);
-  showSyncIndicator('saving');
-  _syncTimer = setTimeout(async () => {
-    await syncSaveState(stateObj);
-    showSyncIndicator('saved');
-  }, 1500);
+/* ── Inicializar Supabase v2 y sincronizar datos ── */
+async function initSupabase() {
+  // Verificar credenciales
+  if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+    console.warn('[Supabase] Credenciales no encontradas — verifica config.js');
+    showSyncBadge('☁ Config no encontrado', '#ffcc4d');
+    return;
+  }
+
+  // En Supabase JS v2, el CDN expone window.supabase como objeto con createClient
+  const supabaseLib = window.supabase;
+  if (!supabaseLib || typeof supabaseLib.createClient !== 'function') {
+    console.warn('[Supabase] SDK v2 no disponible');
+    showSyncBadge('☁ SDK no cargado', '#ff4d5e');
+    return;
+  }
+
+  try {
+    // Crear cliente Supabase v2
+    window._cedanoDb = supabaseLib.createClient(
+      window.SUPABASE_URL,
+      window.SUPABASE_ANON_KEY,
+      {
+        auth: { persistSession: false }
+      }
+    );
+
+    showSyncBadge('☁ Conectando...', '#4db5ff');
+
+    const KEY = 'CEDANO_V6';
+
+    // Intentar cargar datos remotos
+    const { data, error } = await window._cedanoDb
+      .from('cedano_state')
+      .select('data, updated_at')
+      .eq('id', 'main')
+      .maybeSingle(); // maybeSingle() no lanza error si no hay fila
+
+    const localRaw = localStorage.getItem(KEY);
+
+    if (error) {
+      console.error('[Supabase] Error al leer:', error.message);
+      showSyncBadge('☁ Error al leer', '#ff4d5e');
+      return;
+    }
+
+    if (!data || !data.data || Object.keys(data.data).length === 0) {
+      // Sin datos remotos → subir localStorage si existe
+      if (localRaw) {
+        const { error: upErr } = await window._cedanoDb
+          .from('cedano_state')
+          .upsert({
+            id: 'main',
+            data: JSON.parse(localRaw),
+            updated_at: new Date().toISOString()
+          });
+        if (upErr) {
+          console.error('[Supabase] Error al subir:', upErr.message);
+          showSyncBadge('☁ Error al subir', '#ff4d5e');
+        } else {
+          console.log('[Supabase] Datos subidos ✅');
+          showSyncBadge('☁ Datos subidos', '#22d468');
+        }
+      } else {
+        showSyncBadge('☁ Listo', '#22d468');
+      }
+      return;
+    }
+
+    // Comparar fechas para decidir qué versión usar
+    const remoteLastOpen = data.data.lastOpenDate || '2000-01-01';
+    const localLastOpen  = localRaw
+      ? (JSON.parse(localRaw).lastOpenDate || '2000-01-01')
+      : '2000-01-01';
+
+    const remoteDate = new Date(remoteLastOpen);
+    const localDate  = new Date(localLastOpen);
+
+    if (remoteDate > localDate) {
+      // Remoto más reciente → descargar
+      console.log('[Supabase] Datos remotos más recientes → descargando...');
+      localStorage.setItem(KEY, JSON.stringify(data.data));
+      if (typeof loadState === 'function') window.state = loadState();
+      if (typeof render === 'function') render();
+      showSyncBadge('☁ Datos descargados', '#22d468');
+    } else {
+      // Local más reciente → subir
+      console.log('[Supabase] Datos locales más recientes → subiendo...');
+      if (localRaw) {
+        const { error: upErr } = await window._cedanoDb
+          .from('cedano_state')
+          .upsert({
+            id: 'main',
+            data: JSON.parse(localRaw),
+            updated_at: new Date().toISOString()
+          });
+        if (upErr) {
+          console.error('[Supabase] Error sync:', upErr.message);
+          showSyncBadge('☁ Error sync', '#ff4d5e');
+        } else {
+          showSyncBadge('☁ Sincronizado', '#22d468');
+        }
+      }
+    }
+
+  } catch (e) {
+    console.error('[Supabase] Error inesperado:', e);
+    showSyncBadge('☁ Sin conexión', '#ff4d5e');
+  }
 }
