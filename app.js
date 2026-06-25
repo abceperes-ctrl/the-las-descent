@@ -200,7 +200,8 @@ function loadState() {
 }
 
 function saveState() {
-  localStorage.setItem(KEY, JSON.stringify(state));
+state._updatedAt = new Date().toISOString();
+localStorage.setItem(KEY, JSON.stringify(state));
   // Sync con Supabase (debounce 800ms)
   if (window._cedanoSaveTimeout) clearTimeout(window._cedanoSaveTimeout);
   window._cedanoSaveTimeout = setTimeout(async () => {
