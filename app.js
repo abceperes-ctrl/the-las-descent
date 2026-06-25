@@ -2279,5 +2279,4 @@ checkDayReset();
 checkBackupReminder();
 checkWeeklyReview();
 setTimeout(checkBirthdays, 5000);
-render();
-setTimeout(initSupabase, 1200);
+initSupabase().then(() => render()).catch(() => render());
