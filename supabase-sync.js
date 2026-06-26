@@ -503,11 +503,13 @@ async function initSupabase() {
   });
 
   // ── Verificar sesión existente ──────────────────────────
-  const { data: { session } } = await db.auth.getSession();
-
   if (!session) {
-    // No hay sesión → mostrar login
-    renderAuthScreen();
-  }
-  // Si hay sesión, onAuthStateChange la disparará con INITIAL_SESSION → SIGNED_IN
+  // No hay sesión = mostrar login
+  renderAuthScreen();
+} else {
+  // SI HAY SESIÓN: No esperes el evento. Carga y pinta YA
+  console.log(' Sesión activa:', session.user.email);
+  const remoteData = await loadUserData(db, session.user.id);
+  if (remoteData) state = remoteData;
+  render(); // <- ESTA ERA LA QUE FALTABA
 }
