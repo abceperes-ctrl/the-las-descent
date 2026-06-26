@@ -463,15 +463,13 @@ async function initSupabase() {
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
 
       // Cargar datos del usuario desde Supabase
-      const remoteData = await loadUserData(db, user.id);
+   const remoteData = await loadUserData(db, user.id); // <- Sí carga tus datos ✅
 
-      // Si hay datos remotos, sobreescribir el estado
-      if (remoteData && typeof loadState === 'function') {
-        localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
-        const fresh = loadState();
-        try { state = fresh; } catch(e) {}
-        window.state = fresh;
-      }
+if (remoteData && typeof loadState === 'function') {
+  localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
+  const fresh = loadState(); // <- Carga el localStorage
+state = remoteData; 
+window.state = remoteData;
 
       // Inyectar nombre del usuario si es cuenta nueva
       if (window.state && !window.state.userName && user.user_metadata?.display_name) {
