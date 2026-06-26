@@ -468,7 +468,9 @@ async function initSupabase() {
 if (remoteData && typeof loadState === 'function') {
   localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
   const fresh = loadState(); // <- Carga el localStorage
-state = remoteData; 
+console.log('REMOTE DATA:', remoteData); // <- 1
+console.log('USER ID:', user.id); // <- 2
+state = remoteData;
 window.state = remoteData;
 
       // Inyectar nombre del usuario si es cuenta nueva
