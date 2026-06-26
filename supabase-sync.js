@@ -151,8 +151,6 @@ function renderAuthScreen(errorMsg) {
           </div>
         </div>
 
-        ${errorMsg ? `<div style="background:rgba(255,77,94,.12);border:1.5px solid rgba(255,77,94,.35);border-radius:8px;padding:10px 14px;font-size:13px;color:#ff4d5e;font-weight:600">${errorMsg}</div>` : ''}
-
         <div id="authMsgBox" style="display:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600"></div>
 
         <button id="authSubmitBtn" onclick="submitAuth()"
@@ -395,11 +393,9 @@ async function initSupabase() {
 
   const db = window._cedanoDb;
 
-  // ── Un solo listener maneja todo — sin getSession separado ──
   db.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth] Evento:', event, session?.user?.email || '(sin usuario)');
 
-    // ── Recarga con sesión activa ──
     if (event === 'INITIAL_SESSION') {
       if (!session) {
         _forceClearSkeleton();
@@ -424,11 +420,10 @@ async function initSupabase() {
       if (typeof render === 'function') render();
       return;
     }
- // ── Login en caliente ──
+
     if (event === 'SIGNED_IN' && session?.user) {
-// Evitar doble render si INITIAL_SESSION ya corrió
-      if (window._cedanoCurrentUser?.id === session.user.id) return;      if (window._cedanoCurrentUser?.id === session.user.id) return; <- NUEVO
-      
+      if (window._cedanoCurrentUser?.id === session.user.id) return;
+
       window._cedanoCurrentUser = session.user;
       const authScreen = document.getElementById('cedano-auth-screen');
       if (authScreen) authScreen.remove();
@@ -449,3 +444,13 @@ async function initSupabase() {
       if (typeof render === 'function') render();
       return;
     }
+
+    if (event === 'SIGNED_OUT') {
+      window._cedanoCurrentUser = null;
+      localStorage.removeItem('CEDANO_V6');
+      localStorage.removeItem('CEDANO_AI_HIST');
+      renderAuthScreen();
+      return;
+    }
+  });
+}
