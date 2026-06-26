@@ -354,7 +354,7 @@ window.saveUserDataToSupabase = async function(stateObj) {
 };
 
 /* =========================================================
-   INIT PRINCIPAL — CORREGIDO
+   INIT PRINCIPAL — CORREGIDO (fix pantalla negra al recargar)
    ========================================================= */
 async function initSupabase() {
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
@@ -422,7 +422,7 @@ async function initSupabase() {
     }
   });
 
-  // ✅ FIX: llave de desestructuración corregida
+  // ✅ FIX PRINCIPAL: getSession al recargar — ahora setea currentUser y llama subscribeRealtime
   const { data } = await db.auth.getSession();
   const session  = data?.session;
 
@@ -430,11 +430,29 @@ async function initSupabase() {
     renderAuthScreen();
   } else {
     console.log('✅ Sesión activa:', session.user.email);
+
+    // ← CRÍTICO: sin esto header() falla y la app queda negra
+    window._cedanoCurrentUser = session.user;
+
+    showSyncBadge('☁ Cargando datos...', '#4db5ff');
     const remoteData = await loadUserData(db, session.user.id);
+
     if (remoteData) {
+      localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
       state        = remoteData;
       window.state = remoteData;
-      if (typeof render === 'function') render();
+
+      if (window.state && !window.state.userName && session.user.user_metadata?.display_name) {
+        window.state.userName = session.user.user_metadata.display_name;
+        if (typeof saveState === 'function') saveState();
+      }
+
+      if (typeof checkDayReset === 'function') checkDayReset();
     }
+
+    // ← CRÍTICO: sin esto el canal realtime nunca arranca al recargar
+    subscribeRealtime(db, session.user.id);
+
+    if (typeof render === 'function') render();
   }
 }
