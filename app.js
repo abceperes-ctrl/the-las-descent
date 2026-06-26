@@ -200,22 +200,16 @@ function loadState() {
 }
 
 function saveState() {
-state._updatedAt = new Date().toISOString();
-localStorage.setItem(KEY, JSON.stringify(state));
-  // Sync con Supabase (debounce 800ms)
+  state._updatedAt = new Date().toISOString();
+  localStorage.setItem(KEY, JSON.stringify(state));
+
   if (window._cedanoSaveTimeout) clearTimeout(window._cedanoSaveTimeout);
   window._cedanoSaveTimeout = setTimeout(async () => {
-    try {
-      if (!window._cedanoDb) return;
-      const { error } = await window._cedanoDb
-        .from('cedano_state')
-        .upsert({ id: 'main', data: state, updated_at: new Date().toISOString() });
-      if (error) showSyncBadge('☁ Error sync', '#ff4d5e');
-      else showSyncBadge('☁ Sincronizado', '#22d468');
-    } catch { showSyncBadge('☁ Sin conexión', '#ff4d5e'); }
+    if (typeof window.saveUserDataToSupabase === 'function') {
+      await window.saveUserDataToSupabase(state);
+    }
   }, 800);
 }
-
 function setState(patch) { state = { ...state, ...patch }; saveState(); render(); }
 
 /* =====================================================================
@@ -676,15 +670,74 @@ function renderFocusMode() {
 }
 
 function header() {
-  const nc=notifCount();
+  const nc = notifCount();
+  const user = window._cedanoCurrentUser;
+  const userEmail = user?.email || '';
+  const userInitial = userEmail ? userEmail[0].toUpperCase() : '?';
+
   return `<div class="topbar">
     <button class="icon-btn" onclick="openSearch()" aria-label="Búsqueda global">🔍</button>
     <div class="brand">CEDANO BUSINESS</div>
-    <button class="icon-btn" onclick="toggleTheme()" aria-label="Cambiar tema">${darkMode?"☀":"🌙"}</button>
+    <button class="icon-btn" onclick="toggleTheme()" aria-label="Cambiar tema">${darkMode ? '☀' : '🌙'}</button>
     <button class="icon-btn" onclick="openAI()" aria-label="Abrir IA" style="position:relative">
-      🧠${nc>0?`<span class="topbar-badge">${nc}</span>`:""}
+      🧠${nc > 0 ? `<span class="topbar-badge">${nc}</span>` : ''}
+    </button>
+    <button class="icon-btn" onclick="showUserMenu()"
+      style="background:var(--neon);color:#000;font-weight:900;font-size:14px"
+      title="${userEmail}">
+      ${userInitial}
     </button>
   </div>`;
+}
+function showUserMenu() {
+  const existing = document.getElementById('user-menu-popup');
+  if (existing) { existing.remove(); return; }
+
+  const user = window._cedanoCurrentUser;
+  const email = user?.email || '';
+  const name  = window.state?.userName || '';
+
+  const menu = document.createElement('div');
+  menu.id = 'user-menu-popup';
+  menu.style.cssText = `
+    position:fixed;top:58px;right:14px;
+    background:var(--card);border:1.5px solid var(--line);
+    border-radius:12px;padding:14px;min-width:230px;
+    z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);
+    animation:fadeIn .15s ease;
+  `;
+  menu.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;
+                padding-bottom:12px;border-bottom:1px solid var(--line)">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--neon);
+                  display:flex;align-items:center;justify-content:center;
+                  font-weight:900;font-size:18px;color:#000;flex-shrink:0">
+        ${email[0]?.toUpperCase() || '?'}
+      </div>
+      <div style="min-width:0">
+        ${name ? `<p style="font-weight:800;font-size:14px;margin:0">${esc(name)}</p>` : ''}
+        <p style="color:var(--muted);font-size:12px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(email)}</p>
+      </div>
+    </div>
+    <button onclick="document.getElementById('user-menu-popup').remove();go('Imperio')"
+      style="display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;
+             background:none;border:none;cursor:pointer;color:var(--text);
+             font-family:inherit;font-size:13px;font-weight:600;margin-bottom:4px">
+      ⚙ Configuración
+    </button>
+    <button onclick="document.getElementById('user-menu-popup').remove();cerrarSesion()"
+      style="display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;
+             background:none;border:none;cursor:pointer;color:var(--danger);
+             font-family:inherit;font-size:13px;font-weight:700">
+      🚪 Cerrar sesión
+    </button>
+  `;
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    document.addEventListener('click', function close(e) {
+      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); }
+    });
+  }, 50);
 }
 function toggleTheme() {
   darkMode=!darkMode; localStorage.setItem("CEDANO_THEME",darkMode?"dark":"light");
@@ -2279,4 +2332,4 @@ checkDayReset();
 checkBackupReminder();
 checkWeeklyReview();
 setTimeout(checkBirthdays, 5000);
-initSupabase().then(() => render()).catch(() => render());
+initSupabase();
