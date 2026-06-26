@@ -424,9 +424,11 @@ async function initSupabase() {
       if (typeof render === 'function') render();
       return;
     }
-
-    // ── Login en caliente ──
+ // ── Login en caliente ──
     if (event === 'SIGNED_IN' && session?.user) {
+      // Evitar doble render si INITIAL_SESSION ya corrió <- NUEVO
+      if (window._cedanoCurrentUser?.id === session.user.id) return; <- NUEVO
+      
       window._cedanoCurrentUser = session.user;
       const authScreen = document.getElementById('cedano-auth-screen');
       if (authScreen) authScreen.remove();
@@ -437,8 +439,8 @@ async function initSupabase() {
         localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
         state        = remoteData;
         window.state = remoteData;
-        if (!window.state.userName && session.user.user_metadata?.display_name) {
-          window.state.userName = session.user.user_metadata.display_name;
+        if (!window.state.userName && session.user_metadata?.display_name) {
+          window.state.userName = session.user_metadata.display_name;
           if (typeof saveState === 'function') saveState();
         }
         if (typeof checkDayReset === 'function') checkDayReset();
@@ -447,15 +449,3 @@ async function initSupabase() {
       if (typeof render === 'function') render();
       return;
     }
-
-    // ── Logout ──
-    if (event === 'SIGNED_OUT') {
-      window._cedanoCurrentUser = null;
-      if (!document.getElementById('cedano-auth-screen')) renderAuthScreen();
-      if (window._cedanoRealtimeChannel) {
-        try { db.removeChannel(window._cedanoRealtimeChannel); } catch(e) {}
-        window._cedanoRealtimeChannel = null;
-      }
-    }
-  });
-}
