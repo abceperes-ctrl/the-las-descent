@@ -426,8 +426,8 @@ async function initSupabase() {
     }
  // ── Login en caliente ──
     if (event === 'SIGNED_IN' && session?.user) {
-      // Evitar doble render si INITIAL_SESSION ya corrió <- NUEVO
-      if (window._cedanoCurrentUser?.id === session.user.id) return; <- NUEVO
+// Evitar doble render si INITIAL_SESSION ya corrió
+      if (window._cedanoCurrentUser?.id === session.user.id) return;      if (window._cedanoCurrentUser?.id === session.user.id) return; <- NUEVO
       
       window._cedanoCurrentUser = session.user;
       const authScreen = document.getElementById('cedano-auth-screen');
