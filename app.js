@@ -2344,5 +2344,5 @@ window._cedanoRenderSafetyNet = setTimeout(() => {
     if (typeof rebuildDOM === 'function') rebuildDOM();
     if (typeof render === 'function') render();
   }
-}, 4000); // ← 4 segundos
+}, 8000); // ← 4 segundos
 initSupabase();
