@@ -88,6 +88,9 @@ function renderAuthScreen(errorMsg) {
   const existing = document.getElementById('cedano-auth-screen');
   if (existing) existing.remove();
 
+  const sk = document.getElementById('skeletonLoader');
+  if (sk) sk.remove();
+
   const screen = document.createElement('div');
   screen.id = 'cedano-auth-screen';
   screen.style.cssText = `
@@ -354,7 +357,18 @@ window.saveUserDataToSupabase = async function(stateObj) {
 };
 
 /* =========================================================
-   INIT PRINCIPAL — CORREGIDO (fix pantalla negra al recargar)
+   HELPER — limpiar skeleton y reconstruir DOM
+   ========================================================= */
+function _forceClearSkeleton() {
+  const sk = document.getElementById('skeletonLoader');
+  if (sk) sk.remove();
+  if (typeof rebuildDOM === 'function' && !document.getElementById('screen')) {
+    rebuildDOM();
+  }
+}
+
+/* =========================================================
+   INIT PRINCIPAL
    ========================================================= */
 async function initSupabase() {
   if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
@@ -378,6 +392,7 @@ async function initSupabase() {
 
   const db = window._cedanoDb;
 
+  // ── Listener de cambios de sesión (login / logout en caliente) ──
   db.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth] Evento:', event, session?.user?.email || '(sin usuario)');
 
@@ -390,6 +405,9 @@ async function initSupabase() {
 
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
       const remoteData = await loadUserData(db, user.id);
+
+      // ✅ Limpiar skeleton DESPUÉS de tener los datos
+      _forceClearSkeleton();
 
       if (remoteData) {
         localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
@@ -405,6 +423,8 @@ async function initSupabase() {
         if (typeof checkDayReset === 'function') checkDayReset();
         if (typeof render        === 'function') render();
       } else {
+        // Cuenta nueva sin datos remotos
+        subscribeRealtime(db, user.id);
         if (typeof render === 'function') render();
       }
 
@@ -422,16 +442,17 @@ async function initSupabase() {
     }
   });
 
-  // ✅ FIX PRINCIPAL: getSession al recargar — ahora setea currentUser y llama subscribeRealtime
+  // ── Verificar sesión existente al recargar ──
   const { data } = await db.auth.getSession();
   const session  = data?.session;
 
   if (!session) {
+    // Sin sesión → mostrar login
+    _forceClearSkeleton();
     renderAuthScreen();
   } else {
     console.log('✅ Sesión activa:', session.user.email);
 
-    // ← CRÍTICO: sin esto header() falla y la app queda negra
     window._cedanoCurrentUser = session.user;
 
     showSyncBadge('☁ Cargando datos...', '#4db5ff');
@@ -450,9 +471,9 @@ async function initSupabase() {
       if (typeof checkDayReset === 'function') checkDayReset();
     }
 
-    // ← CRÍTICO: sin esto el canal realtime nunca arranca al recargar
+    // ✅ Limpiar skeleton SIEMPRE, haya o no datos remotos
+    _forceClearSkeleton();
     subscribeRealtime(db, session.user.id);
-
     if (typeof render === 'function') render();
   }
 }
