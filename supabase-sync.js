@@ -91,6 +91,8 @@ function renderAuthScreen(errorMsg) {
   const sk = document.getElementById('skeletonLoader');
   if (sk) sk.remove();
 
+  clearTimeout(window._cedanoRenderSafetyNet);
+
   const screen = document.createElement('div');
   screen.id = 'cedano-auth-screen';
   screen.style.cssText = `
@@ -360,6 +362,7 @@ window.saveUserDataToSupabase = async function(stateObj) {
    HELPER — limpiar skeleton y reconstruir DOM
    ========================================================= */
 function _forceClearSkeleton() {
+  clearTimeout(window._cedanoRenderSafetyNet);
   const sk = document.getElementById('skeletonLoader');
   if (sk) sk.remove();
   if (typeof rebuildDOM === 'function' && !document.getElementById('screen')) {
@@ -406,7 +409,7 @@ async function initSupabase() {
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
       const remoteData = await loadUserData(db, user.id);
 
-      // ✅ Limpiar skeleton DESPUÉS de tener los datos
+      // ✅ Limpiar skeleton DESPUÉS de tener los datos + cancelar safety net
       _forceClearSkeleton();
 
       if (remoteData) {
@@ -423,7 +426,6 @@ async function initSupabase() {
         if (typeof checkDayReset === 'function') checkDayReset();
         if (typeof render        === 'function') render();
       } else {
-        // Cuenta nueva sin datos remotos
         subscribeRealtime(db, user.id);
         if (typeof render === 'function') render();
       }
@@ -447,7 +449,6 @@ async function initSupabase() {
   const session  = data?.session;
 
   if (!session) {
-    // Sin sesión → mostrar login
     _forceClearSkeleton();
     renderAuthScreen();
   } else {
@@ -471,7 +472,7 @@ async function initSupabase() {
       if (typeof checkDayReset === 'function') checkDayReset();
     }
 
-    // ✅ Limpiar skeleton SIEMPRE, haya o no datos remotos
+    // ✅ Limpiar skeleton SIEMPRE + cancelar safety net
     _forceClearSkeleton();
     subscribeRealtime(db, session.user.id);
     if (typeof render === 'function') render();
