@@ -2338,13 +2338,11 @@ window._cedanoRenderSafetyNet = setTimeout(() => {
   const sk = document.getElementById('skeletonLoader');
   const screen = document.getElementById('screen');
   const authScreen = document.getElementById('cedano-auth-screen');
-  // Si después de 5s todavía hay skeleton y nada más renderizó
   if (sk && !screen && !authScreen) {
     console.warn('[SafetyNet] Forzando render por timeout');
     if (sk) sk.remove();
     if (typeof rebuildDOM === 'function') rebuildDOM();
     if (typeof render === 'function') render();
   }
-}, 5000);
-
+}, 4000); // ← 4 segundos
 initSupabase();
