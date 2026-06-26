@@ -395,86 +395,67 @@ async function initSupabase() {
 
   const db = window._cedanoDb;
 
-  // ── Listener de cambios de sesión (login / logout en caliente) ──
+  // ── Un solo listener maneja todo — sin getSession separado ──
   db.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth] Evento:', event, session?.user?.email || '(sin usuario)');
 
-    if (event === 'SIGNED_IN' && session?.user) {
-      const user = session.user;
-      window._cedanoCurrentUser = user;
-
-      const authScreen = document.getElementById('cedano-auth-screen');
-      if (authScreen) authScreen.remove();
-
+    // ── Recarga con sesión activa ──
+    if (event === 'INITIAL_SESSION') {
+      if (!session) {
+        _forceClearSkeleton();
+        renderAuthScreen();
+        return;
+      }
+      window._cedanoCurrentUser = session.user;
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
-      const remoteData = await loadUserData(db, user.id);
-
-      // ✅ Limpiar skeleton DESPUÉS de tener los datos + cancelar safety net
-      _forceClearSkeleton();
-
+      const remoteData = await loadUserData(db, session.user.id);
       if (remoteData) {
         localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
         state        = remoteData;
         window.state = remoteData;
-
-        if (window.state && !window.state.userName && user.user_metadata?.display_name) {
-          window.state.userName = user.user_metadata.display_name;
+        if (!window.state.userName && session.user.user_metadata?.display_name) {
+          window.state.userName = session.user.user_metadata.display_name;
           if (typeof saveState === 'function') saveState();
         }
-
-        subscribeRealtime(db, user.id);
         if (typeof checkDayReset === 'function') checkDayReset();
-        if (typeof render        === 'function') render();
-      } else {
-        subscribeRealtime(db, user.id);
-        if (typeof render === 'function') render();
       }
+      _forceClearSkeleton();
+      subscribeRealtime(db, session.user.id);
+      if (typeof render === 'function') render();
+      return;
+    }
 
-    } else if (event === 'SIGNED_OUT' || (!session && event === 'INITIAL_SESSION')) {
+    // ── Login en caliente ──
+    if (event === 'SIGNED_IN' && session?.user) {
+      window._cedanoCurrentUser = session.user;
+      const authScreen = document.getElementById('cedano-auth-screen');
+      if (authScreen) authScreen.remove();
+      showSyncBadge('☁ Cargando datos...', '#4db5ff');
+      const remoteData = await loadUserData(db, session.user.id);
+      _forceClearSkeleton();
+      if (remoteData) {
+        localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
+        state        = remoteData;
+        window.state = remoteData;
+        if (!window.state.userName && session.user.user_metadata?.display_name) {
+          window.state.userName = session.user.user_metadata.display_name;
+          if (typeof saveState === 'function') saveState();
+        }
+        if (typeof checkDayReset === 'function') checkDayReset();
+      }
+      subscribeRealtime(db, session.user.id);
+      if (typeof render === 'function') render();
+      return;
+    }
+
+    // ── Logout ──
+    if (event === 'SIGNED_OUT') {
       window._cedanoCurrentUser = null;
-
-      if (!document.getElementById('cedano-auth-screen')) {
-        renderAuthScreen();
-      }
-
+      if (!document.getElementById('cedano-auth-screen')) renderAuthScreen();
       if (window._cedanoRealtimeChannel) {
         try { db.removeChannel(window._cedanoRealtimeChannel); } catch(e) {}
         window._cedanoRealtimeChannel = null;
       }
     }
   });
-
-  // ── Verificar sesión existente al recargar ──
-  const { data } = await db.auth.getSession();
-  const session  = data?.session;
-
-  if (!session) {
-    _forceClearSkeleton();
-    renderAuthScreen();
-  } else {
-    console.log('✅ Sesión activa:', session.user.email);
-
-    window._cedanoCurrentUser = session.user;
-
-    showSyncBadge('☁ Cargando datos...', '#4db5ff');
-    const remoteData = await loadUserData(db, session.user.id);
-
-    if (remoteData) {
-      localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
-      state        = remoteData;
-      window.state = remoteData;
-
-      if (window.state && !window.state.userName && session.user.user_metadata?.display_name) {
-        window.state.userName = session.user.user_metadata.display_name;
-        if (typeof saveState === 'function') saveState();
-      }
-
-      if (typeof checkDayReset === 'function') checkDayReset();
-    }
-
-    // ✅ Limpiar skeleton SIEMPRE + cancelar safety net
-    _forceClearSkeleton();
-    subscribeRealtime(db, session.user.id);
-    if (typeof render === 'function') render();
-  }
 }
