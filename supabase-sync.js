@@ -18,7 +18,7 @@ function showSyncBadge(msg, color) {
   }
   el.textContent = msg;
   el.style.background = color;
-  el.style.color = (color === '#ffcc4d' || color === '#22d468')? '#000' : '#fff';
+  el.style.color = (color === '#ffcc4d' || color === '#22d468') ? '#000' : '#fff';
   el.style.opacity = '1';
   clearTimeout(el._t);
   el._t = setTimeout(() => { el.style.opacity = '0'; }, 3500);
@@ -28,7 +28,7 @@ function showSyncBadge(msg, color) {
 function applyRemoteData(remoteData) {
   const KEY = 'CEDANO_V6';
   localStorage.setItem(KEY, JSON.stringify(remoteData));
-  state = remoteData; // <- FIX: Directo, sin fresh dañado
+  state = remoteData;
   window.state = remoteData;
   if (typeof checkDayReset === 'function') checkDayReset();
   if (typeof render === 'function') render();
@@ -41,8 +41,8 @@ function subscribeRealtime(db, userId) {
   }
 
   window._cedanoRealtimeChannel = db
-   .channel('cedano-user-' + userId)
-   .on(
+    .channel('cedano-user-' + userId)
+    .on(
       'postgres_changes',
       {
         event: 'UPDATE',
@@ -65,7 +65,7 @@ function subscribeRealtime(db, userId) {
         }
       }
     )
-   .subscribe((status, err) => {
+    .subscribe((status, err) => {
       console.log('[Realtime] Status:', status, err || '');
       if (status === 'SUBSCRIBED') {
         showSyncBadge('☁ En tiempo real ✓', '#22d468');
@@ -146,7 +146,7 @@ function renderAuthScreen(errorMsg) {
           </div>
         </div>
 
-        ${errorMsg? `<div style="background:rgba(255,77,94,.12);border:1.5px solid rgba(255,77,94,.35);border-radius:8px;padding:10px 14px;font-size:13px;color:#ff4d5e;font-weight:600">${errorMsg}</div>` : ''}
+        ${errorMsg ? `<div style="background:rgba(255,77,94,.12);border:1.5px solid rgba(255,77,94,.35);border-radius:8px;padding:10px 14px;font-size:13px;color:#ff4d5e;font-weight:600">${errorMsg}</div>` : ''}
 
         <div id="authMsgBox" style="display:none;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600"></div>
 
@@ -177,92 +177,67 @@ let _authMode = 'login';
 function switchAuthTab(mode) {
   _authMode = mode;
   const isLogin = mode === 'login';
-  const tabLogin = document.getElementById('authTabLogin');
+  const tabLogin    = document.getElementById('authTabLogin');
   const tabRegister = document.getElementById('authTabRegister');
-  const nameField = document.getElementById('authNameField');
-  const submitBtn = document.getElementById('authSubmitBtn');
-  const forgotBtn = document.getElementById('authForgotBtn');
-  const msgBox = document.getElementById('authMsgBox');
+  const nameField   = document.getElementById('authNameField');
+  const submitBtn   = document.getElementById('authSubmitBtn');
+  const forgotBtn   = document.getElementById('authForgotBtn');
+  const msgBox      = document.getElementById('authMsgBox');
 
-  if (tabLogin) {
-    tabLogin.style.background = isLogin? '#22d468' : '#151d26';
-    tabLogin.style.color = isLogin? '#000' : '#6b7f8f';
-  }
-  if (tabRegister) {
-    tabRegister.style.background =!isLogin? '#22d468' : '#151d26';
-    tabRegister.style.color =!isLogin? '#000' : '#6b7f8f';
-  }
-  if (nameField) nameField.style.display = isLogin? 'none' : 'block';
-  if (submitBtn) submitBtn.textContent = isLogin? 'Iniciar sesión' : 'Crear cuenta';
-  if (forgotBtn) forgotBtn.style.display = isLogin? 'block' : 'none';
-  if (msgBox) { msgBox.style.display = 'none'; msgBox.textContent = ''; }
+  if (tabLogin)    { tabLogin.style.background    = isLogin ? '#22d468' : '#151d26'; tabLogin.style.color    = isLogin ? '#000' : '#6b7f8f'; }
+  if (tabRegister) { tabRegister.style.background = !isLogin ? '#22d468' : '#151d26'; tabRegister.style.color = !isLogin ? '#000' : '#6b7f8f'; }
+  if (nameField)   nameField.style.display  = isLogin ? 'none' : 'block';
+  if (submitBtn)   submitBtn.textContent    = isLogin ? 'Iniciar sesión' : 'Crear cuenta';
+  if (forgotBtn)   forgotBtn.style.display  = isLogin ? 'block' : 'none';
+  if (msgBox)      { msgBox.style.display = 'none'; msgBox.textContent = ''; }
 }
 
 function togglePasswordVisibility() {
   const input = document.getElementById('authPassword');
   if (!input) return;
-  input.type = input.type === 'password'? 'text' : 'password';
+  input.type = input.type === 'password' ? 'text' : 'password';
 }
 
 function showAuthMsg(msg, isError) {
   const box = document.getElementById('authMsgBox');
   if (!box) return;
-  box.style.display = 'block';
-  box.textContent = msg;
-  box.style.background = isError? 'rgba(255,77,94,.12)' : 'rgba(34,212,104,.12)';
-  box.style.border = isError? '1.5px solid rgba(255,77,94,.35)' : '1.5px solid rgba(34,212,104,.35)';
-  box.style.color = isError? '#ff4d5e' : '#22d468';
+  box.style.display  = 'block';
+  box.textContent    = msg;
+  box.style.background = isError ? 'rgba(255,77,94,.12)' : 'rgba(34,212,104,.12)';
+  box.style.border     = isError ? '1.5px solid rgba(255,77,94,.35)' : '1.5px solid rgba(34,212,104,.35)';
+  box.style.color      = isError ? '#ff4d5e' : '#22d468';
 }
 
 function setAuthLoading(loading) {
   const btn = document.getElementById('authSubmitBtn');
   if (!btn) return;
-  btn.disabled = loading;
-  btn.style.opacity = loading? '0.6' : '1';
-  btn.textContent = loading
-   ? 'Cargando...'
-    : (_authMode === 'login'? 'Iniciar sesión' : 'Crear cuenta');
+  btn.disabled      = loading;
+  btn.style.opacity = loading ? '0.6' : '1';
+  btn.textContent   = loading ? 'Cargando...' : (_authMode === 'login' ? 'Iniciar sesión' : 'Crear cuenta');
 }
 
 async function submitAuth() {
   const db = window._cedanoDb;
   if (!db) return;
-  const email = (document.getElementById('authEmail')?.value || '').trim();
-  const password = document.getElementById('authPassword')?.value || '';
-  const name = (document.getElementById('authName')?.value || '').trim();
+  const email    = (document.getElementById('authEmail')?.value    || '').trim();
+  const password =  document.getElementById('authPassword')?.value || '';
+  const name     = (document.getElementById('authName')?.value     || '').trim();
 
-  if (!email ||!password) {
-    showAuthMsg('❌ Ingresa tu correo y contraseña.', true);
-    return;
-  }
-  if (_authMode === 'register' &&!name) {
-    showAuthMsg('❌ Ingresa tu nombre.', true);
-    return;
-  }
-  if (password.length < 6) {
-    showAuthMsg('❌ La contraseña debe tener al menos 6 caracteres.', true);
-    return;
-  }
+  if (!email || !password) { showAuthMsg('❌ Ingresa tu correo y contraseña.', true); return; }
+  if (_authMode === 'register' && !name) { showAuthMsg('❌ Ingresa tu nombre.', true); return; }
+  if (password.length < 6) { showAuthMsg('❌ La contraseña debe tener al menos 6 caracteres.', true); return; }
 
   setAuthLoading(true);
   try {
     if (_authMode === 'login') {
       const { error } = await db.auth.signInWithPassword({ email, password });
-      if (error) {
-        showAuthMsg('❌ ' + translateAuthError(error.message), true);
-        setAuthLoading(false);
-        return;
-      }
+      if (error) { showAuthMsg('❌ ' + translateAuthError(error.message), true); setAuthLoading(false); return; }
     } else {
       const { data, error } = await db.auth.signUp({
-        email, password, options: { data: { display_name: name }
+        email, password, options: { data: { display_name: name } }
       });
-      if (error) {
-        showAuthMsg('❌ ' + translateAuthError(error.message), true);
-        setAuthLoading(false);
-        return;
-      }
-      if (data.session) { } else {
+      if (error) { showAuthMsg('❌ ' + translateAuthError(error.message), true); setAuthLoading(false); return; }
+      if (!data.session) {
         showAuthMsg('✅ Cuenta creada. Revisa tu correo para confirmar.', false);
         setAuthLoading(false);
       }
@@ -274,28 +249,22 @@ async function submitAuth() {
 }
 
 async function sendPasswordReset() {
-  const db = window._cedanoDb;
+  const db    = window._cedanoDb;
   const email = (document.getElementById('authEmail')?.value || '').trim();
-  if (!email) {
-    showAuthMsg('❌ Ingresa tu correo primero.', true);
-    return;
-  }
+  if (!email) { showAuthMsg('❌ Ingresa tu correo primero.', true); return; }
   const { error } = await db.auth.resetPasswordForEmail(email);
-  if (error) {
-    showAuthMsg('❌ ' + translateAuthError(error.message), true);
-  } else {
-    showAuthMsg('✅ Correo de recuperación enviado a ' + email, false);
-  }
+  if (error) showAuthMsg('❌ ' + translateAuthError(error.message), true);
+  else        showAuthMsg('✅ Correo de recuperación enviado a ' + email, false);
 }
 
 function translateAuthError(msg) {
   if (!msg) return 'Error desconocido.';
-  if (msg.includes('Invalid login credentials')) return 'Correo o contraseña incorrectos.';
-  if (msg.includes('Email not confirmed')) return 'Debes confirmar tu correo antes de entrar.';
-  if (msg.includes('User already registered')) return 'Este correo ya tiene una cuenta. Inicia sesión.';
+  if (msg.includes('Invalid login credentials'))   return 'Correo o contraseña incorrectos.';
+  if (msg.includes('Email not confirmed'))         return 'Debes confirmar tu correo antes de entrar.';
+  if (msg.includes('User already registered'))     return 'Este correo ya tiene una cuenta. Inicia sesión.';
   if (msg.includes('Password should be at least')) return 'La contraseña debe tener al menos 6 caracteres.';
-  if (msg.includes('Unable to validate email')) return 'Correo no válido.';
-  if (msg.includes('rate limit')) return 'Demasiados intentos. Espera un momento.';
+  if (msg.includes('Unable to validate email'))    return 'Correo no válido.';
+  if (msg.includes('rate limit'))                  return 'Demasiados intentos. Espera un momento.';
   return msg;
 }
 
@@ -321,10 +290,10 @@ window.cerrarSesion = cerrarSesion;
 async function loadUserData(db, userId) {
   const KEY = 'CEDANO_V6';
   const { data, error } = await db
-   .from('cedano_state')
-   .select('data, updated_at')
-   .eq('user_id', userId)
-   .maybeSingle();
+    .from('cedano_state')
+    .select('data, updated_at')
+    .eq('user_id', userId)
+    .maybeSingle();
 
   if (error) {
     console.error('[Supabase] Error lectura:', error.message);
@@ -332,7 +301,7 @@ async function loadUserData(db, userId) {
     return null;
   }
 
-  if (!data ||!data.data) {
+  if (!data || !data.data) {
     const localRaw = localStorage.getItem(KEY);
     if (localRaw) {
       const parsed = JSON.parse(localRaw);
@@ -347,7 +316,7 @@ async function loadUserData(db, userId) {
   }
 
   const localRaw = localStorage.getItem(KEY);
-  const localTs = localRaw? (JSON.parse(localRaw)._updatedAt || '2000-01-01') : '2000-01-01';
+  const localTs  = localRaw ? (JSON.parse(localRaw)._updatedAt || '2000-01-01') : '2000-01-01';
   const remoteTs = data.updated_at || '2000-01-01';
 
   if (new Date(remoteTs) >= new Date(localTs)) {
@@ -368,32 +337,32 @@ async function loadUserData(db, userId) {
    GUARDAR DATOS (llamado desde app.js saveState)
    ========================================================= */
 window.saveUserDataToSupabase = async function(stateObj) {
-  const db = window._cedanoDb;
+  const db     = window._cedanoDb;
   const userId = window._cedanoCurrentUser?.id;
-  if (!db ||!userId) return;
+  if (!db || !userId) return;
   try {
     const { error } = await db.from('cedano_state').upsert({
-      user_id: userId,
-      data: stateObj,
+      user_id:    userId,
+      data:       stateObj,
       updated_at: new Date().toISOString()
     });
     if (error) showSyncBadge('☁ Error sync', '#ff4d5e');
-    else showSyncBadge('☁ Guardado', '#22d468');
+    else        showSyncBadge('☁ Guardado',   '#22d468');
   } catch {
     showSyncBadge('☁ Sin conexión', '#ff4d5e');
   }
 };
 
 /* =========================================================
-   INIT PRINCIPAL - FIXED
+   INIT PRINCIPAL — CORREGIDO
    ========================================================= */
 async function initSupabase() {
-  if (!window.SUPABASE_URL ||!window.SUPABASE_ANON_KEY) {
+  if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
     showSyncBadge('☁ Config faltante', '#ffcc4d');
     return;
   }
   const supabaseLib = window.supabase;
-  if (!supabaseLib || typeof supabaseLib.createClient!== 'function') {
+  if (!supabaseLib || typeof supabaseLib.createClient !== 'function') {
     showSyncBadge('☁ SDK no cargado', '#ff4d5e');
     return;
   }
@@ -401,8 +370,10 @@ async function initSupabase() {
   window._cedanoDb = supabaseLib.createClient(
     window.SUPABASE_URL,
     window.SUPABASE_ANON_KEY,
-    { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'cedano_auth' },
-      realtime: { params: { eventsPerSecond: 10 } } }
+    {
+      auth:     { persistSession: true, autoRefreshToken: true, storageKey: 'cedano_auth' },
+      realtime: { params: { eventsPerSecond: 10 } }
+    }
   );
 
   const db = window._cedanoDb;
@@ -413,33 +384,37 @@ async function initSupabase() {
     if (event === 'SIGNED_IN' && session?.user) {
       const user = session.user;
       window._cedanoCurrentUser = user;
+
       const authScreen = document.getElementById('cedano-auth-screen');
       if (authScreen) authScreen.remove();
-      showSyncBadge('☁ Cargando datos...', '#4db5ff');
 
+      showSyncBadge('☁ Cargando datos...', '#4db5ff');
       const remoteData = await loadUserData(db, user.id);
 
-      if (remoteData) { // <- FIX: Quitamos fresh dañado
+      if (remoteData) {
         localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
-        state = remoteData; 
+        state        = remoteData;
         window.state = remoteData;
 
-        if (window.state &&!window.state.userName && user.user_metadata?.display_name) {
+        if (window.state && !window.state.userName && user.user_metadata?.display_name) {
           window.state.userName = user.user_metadata.display_name;
           if (typeof saveState === 'function') saveState();
         }
+
         subscribeRealtime(db, user.id);
         if (typeof checkDayReset === 'function') checkDayReset();
-        if (typeof render === 'function') render();
+        if (typeof render        === 'function') render();
       } else {
-        render(); // Cuenta nueva vacía
+        if (typeof render === 'function') render();
       }
 
     } else if (event === 'SIGNED_OUT' || (!session && event === 'INITIAL_SESSION')) {
       window._cedanoCurrentUser = null;
+
       if (!document.getElementById('cedano-auth-screen')) {
         renderAuthScreen();
       }
+
       if (window._cedanoRealtimeChannel) {
         try { db.removeChannel(window._cedanoRealtimeChannel); } catch(e) {}
         window._cedanoRealtimeChannel = null;
@@ -447,18 +422,19 @@ async function initSupabase() {
     }
   });
 
-  // FIX: Verificar sesión existente con llaves bien cerradas
-  const { data: { session } = await db.auth.getSession();
+  // ✅ FIX: llave de desestructuración corregida
+  const { data } = await db.auth.getSession();
+  const session  = data?.session;
 
   if (!session) {
     renderAuthScreen();
   } else {
-    console.log(' Sesión activa:', session.user.email);
+    console.log('✅ Sesión activa:', session.user.email);
     const remoteData = await loadUserData(db, session.user.id);
     if (remoteData) {
-      state = remoteData;
+      state        = remoteData;
       window.state = remoteData;
-      render();
+      if (typeof render === 'function') render();
     }
   }
-} // <- AQUÍ ESTABA LA LLAVE QUE FALTABA
+}
