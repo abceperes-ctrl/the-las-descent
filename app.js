@@ -1,4 +1,3 @@
-cat > /home/claude/cedano/app_completo.js << 'ENDOFFILE'
 /* =====================================================================
    CEDANO BUSINESS v6.0 — app.js COMPLETO Y CORREGIDO
    ===================================================================== */
