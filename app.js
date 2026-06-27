@@ -874,7 +874,7 @@ function taskHTML(task) {
       <small class="muted">${task.type||"Diario"} • ${task.date||"Sin fecha"} • ${task.time||"Sin hora"}${task.completedAt?" • ✅ "+task.completedAt:""}</small>
     </div>
     <span class="pill ${task.priority==="Urgente"?"danger":task.priority==="Alta"?"warn":"green"}">${task.priority}</span>
-    ${sm("🗑","deleteRecord('task','"+task.id+"')","red")}
+    ${sm("🗑",`deleteRecord('task','${task.id}')`,"red")}
   </div>`;
 }
 
@@ -1537,7 +1537,7 @@ function renderObjetivos() {
         <div class="row">
           ${inp("objAdd-"+obj.id,"Agregar ahorro...","number")}
           ${sm("➕ Abonar",`addToObjective('${obj.id}')`,"green")}
-          ${sm("🗑","deleteObjective('"+obj.id+"')","red")}
+          ${sm("🗑",`deleteObjective('${obj.id}')`,"red")}
         </div>
       </div>`;
     }).join(""):`<div class="empty">Sin objetivos. Crea uno arriba.</div>`}`;
