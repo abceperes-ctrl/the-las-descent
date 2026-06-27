@@ -1,4 +1,4 @@
-cat > /mnt/user-data/outputs/app.js << 'ENDOFFILE'
+
 /* =====================================================================
    CEDANO BUSINESS v6.0 — app.js COMPLETO CORREGIDO
    + Notificaciones push de tareas
