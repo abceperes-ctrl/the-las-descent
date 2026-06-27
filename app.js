@@ -1382,7 +1382,7 @@ function renderFlujoCaja() {
         <div><strong>${esc(e.description||"Sin descripción")}</strong><p class="muted" style="font-size:11px">${esc(e.category)} · ${esc(e.date)}</p></div>
         <div style="text-align:right;flex-shrink:0">
           <span style="font-weight:900;color:${e.type==="entrada"?"var(--neon)":"var(--danger)"}">${e.type==="entrada"?"+":"-"}${money(e.amount)}</span><br/>
-          ${sm("🗑","deleteCashFlow('"+e.id+"')","red")}
+          ${sm("🗑",`deleteCashFlow('${e.id}')`,"red")}
         </div>
       </div>`).join(""):`<div class="empty">Sin movimientos registrados</div>`}`;
 }
