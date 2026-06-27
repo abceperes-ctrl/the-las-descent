@@ -1,5 +1,7 @@
 /* =====================================================================
-   CEDANO BUSINESS v6.0 — app.js COMPLETO Y CORREGIDO
+   CEDANO BUSINESS v6.0 — app.js COMPLETO CORREGIDO
+   + Notificaciones push de tareas
+   + Nombre dinámico por usuario registrado
    ===================================================================== */
 
 const KEY = "CEDANO_V6";
@@ -135,7 +137,7 @@ const initialState = {
   prevMonthRevenue: [28000, 40000, 46000, 34000, 60000, 65000],
   lawExams: [], disciplineScore: 72, pinEnabled: false, pin: "",
   onboardingDone: false,
-  notifSettings: { loanOverdueDays: 3, lowStockDefault: 3, pushEnabled: false }
+  notifSettings: { loanOverdueDays: 3, lowStockDefault: 3, pushEnabled: false, taskReminders: false }
 };
 
 let state = loadState();
@@ -167,8 +169,9 @@ function loadState() {
     const base = saved || oldV5 || structuredClone(initialState);
     if (!base.archivedLoans) base.archivedLoans = [];
     if (!base.prevMonthRevenue) base.prevMonthRevenue = [28000,40000,46000,34000,60000,65000];
-    if (!base.notifSettings) base.notifSettings = { loanOverdueDays: 3, lowStockDefault: 3, pushEnabled: false };
+    if (!base.notifSettings) base.notifSettings = { loanOverdueDays: 3, lowStockDefault: 3, pushEnabled: false, taskReminders: false };
     if (base.notifSettings && base.notifSettings.pushEnabled === undefined) base.notifSettings.pushEnabled = false;
+    if (base.notifSettings && base.notifSettings.taskReminders === undefined) base.notifSettings.taskReminders = false;
     if (base.onboardingDone === undefined) base.onboardingDone = true;
     if (!base.quickNotes) base.quickNotes = [];
     if (!base.lastOpenDate) base.lastOpenDate = "";
@@ -200,6 +203,35 @@ function saveState() {
   }, 800);
 }
 function setState(patch) { state = { ...state, ...patch }; saveState(); render(); }
+
+// ── NOMBRE DINÁMICO POR USUARIO REGISTRADO ──────────────────────────────────
+function getDisplayName() {
+  const user = window._cedanoCurrentUser;
+  // Primero intenta el display_name del registro
+  if (user && user.user_metadata && user.user_metadata.display_name) {
+    return user.user_metadata.display_name.split(" ")[0];
+  }
+  // Luego el nombre guardado en state
+  if (state.userName && state.userName.trim() && state.userName !== "Royer") {
+    return state.userName.trim();
+  }
+  // Fallback al email
+  if (user && user.email) {
+    const part = user.email.split("@")[0];
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  }
+  return state.userName || "Usuario";
+}
+
+function syncUserNameFromAuth() {
+  const user = window._cedanoCurrentUser;
+  if (!user) return;
+  const displayName = user.user_metadata?.display_name || "";
+  if (displayName && displayName !== state.userName) {
+    state.userName = displayName;
+    saveState();
+  }
+}
 
 function checkDayReset() {
   const todayStr = today();
@@ -368,11 +400,7 @@ function notifCount() {
 }
 
 function getGreetingName() {
-  const user = window._cedanoCurrentUser;
-  if (state.userName && state.userName.trim() && state.userName !== "Cedano") return state.userName.trim();
-  if (user?.user_metadata?.display_name) return user.user_metadata.display_name.split(" ")[0];
-  if (user?.email) return user.email.split("@")[0];
-  return state.userName || "Usuario";
+  return getDisplayName();
 }
 
 function getMorningBrief() {
@@ -382,7 +410,7 @@ function getMorningBrief() {
   const citasHoy   = state.barberAppointments.filter(a => a.date === today() && !a.completed);
   const billsVenc  = billsOverdue();
   const birthdays  = state.barberClients.filter(c=>c.birthday&&c.birthday.slice(5)===today().slice(5));
-  const nombre   = getGreetingName();
+  const nombre   = getDisplayName();
   const greeting = (h < 12 ? "Buenos días" : h < 18 ? "Buenas tardes" : "Buenas noches") + ", " + nombre;
   const focus = h < 12 ? "Hora de atacar el día. Revisa tus cobros y hábitos."
     : h < 17 ? "Tarde productiva. ¿Ya completaste tu misión?"
@@ -613,7 +641,8 @@ function header() {
   const nc = notifCount();
   const user = window._cedanoCurrentUser;
   const userEmail = user?.email || '';
-  const userInitial = userEmail ? userEmail[0].toUpperCase() : '?';
+  const nombre = getDisplayName();
+  const userInitial = nombre ? nombre[0].toUpperCase() : (userEmail ? userEmail[0].toUpperCase() : '?');
   return `<div class="topbar">
     <button class="icon-btn" onclick="openSearch()" aria-label="Búsqueda global">🔍</button>
     <div class="brand">CEDANO BUSINESS</div>
@@ -630,15 +659,15 @@ function showUserMenu() {
   if (existing) { existing.remove(); return; }
   const user = window._cedanoCurrentUser;
   const email = user?.email || '';
-  const name  = window.state?.userName || '';
+  const nombre = getDisplayName();
   const menu = document.createElement('div');
   menu.id = 'user-menu-popup';
   menu.style.cssText = `position:fixed;top:58px;right:14px;background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:14px;min-width:230px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:fadeIn .15s ease;`;
   menu.innerHTML = `
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)">
-      <div style="width:40px;height:40px;border-radius:50%;background:var(--neon);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#000;flex-shrink:0">${email[0]?.toUpperCase() || '?'}</div>
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--neon);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#000;flex-shrink:0">${nombre[0]?.toUpperCase() || '?'}</div>
       <div style="min-width:0">
-        ${name ? `<p style="font-weight:800;font-size:14px;margin:0">${esc(name)}</p>` : ''}
+        <p style="font-weight:800;font-size:14px;margin:0">${esc(nombre)}</p>
         <p style="color:var(--muted);font-size:12px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(email)}</p>
       </div>
     </div>
@@ -1453,9 +1482,10 @@ function renderImperio() {
   const avgMoney=hist90.length?hist90.reduce((s,d)=>s+Number(d.moneyToday||0),0)/hist90.length:0;
   const avgDiscipline=hist90.length?Math.round(hist90.reduce((s,d)=>s+(d.discipline||0),0)/hist90.length):0;
   const last7=state.history.slice(0,7);
+  const nombre=getDisplayName();
   return `<div class="imperio-hero">
       <div class="imperio-rank">${rankIcon()}</div>
-      <div class="imperio-name">${esc(state.userName)} — ${rank()}</div>
+      <div class="imperio-name">${esc(nombre)} — ${rank()}</div>
       <div class="imperio-sub">${esc(state.businessName)}</div>
     </div>
     <div class="card">
@@ -1508,7 +1538,7 @@ function renderImperio() {
     <h2 class="section-title">⚙ Configuración</h2>
     ${renderNotifCard()}
     ${card("",`
-      ${inp("profileName","Tu nombre","text",state.userName)}
+      ${inp("profileName","Tu nombre","text",nombre)}
       ${inp("profileBusiness","Nombre del negocio","text",state.businessName)}
       ${inp("profileCapital","Capital en efectivo","number",state.capital)}
       ${inp("usdRateInput","Tasa USD → RD$","number",state.usdRate)}
@@ -1688,7 +1718,8 @@ function updatePatrimony() {
   showToast("✅ Patrimonio actualizado");
 }
 function saveProfile() {
-  setState({userName:document.getElementById("profileName")?.value||state.userName,businessName:document.getElementById("profileBusiness")?.value||state.businessName,capital:Number(document.getElementById("profileCapital")?.value||state.capital),usdRate:Number(document.getElementById("usdRateInput")?.value||state.usdRate)});
+  const newName = document.getElementById("profileName")?.value || state.userName;
+  setState({userName:newName,businessName:document.getElementById("profileBusiness")?.value||state.businessName,capital:Number(document.getElementById("profileCapital")?.value||state.capital),usdRate:Number(document.getElementById("usdRateInput")?.value||state.usdRate)});
   showToast("✅ Configuración guardada");
 }
 function saveNotifSettings() {
@@ -1712,8 +1743,20 @@ function toggleHabit(id) {
 }
 function addTask() {
   const text=document.getElementById("taskText")?.value.trim(); if(!text) return;
-  state.tasks.push({id:uid(),text,type:document.getElementById("taskType")?.value||"Diario",date:document.getElementById("taskDate")?.value||"",time:document.getElementById("taskTime")?.value||"",priority:document.getElementById("taskPriority")?.value||"Media",done:false,completedAt:""});
+  const newTask = {
+    id:uid(),text,
+    type:document.getElementById("taskType")?.value||"Diario",
+    date:document.getElementById("taskDate")?.value||"",
+    time:document.getElementById("taskTime")?.value||"",
+    priority:document.getElementById("taskPriority")?.value||"Media",
+    done:false,completedAt:""
+  };
+  state.tasks.push(newTask);
   saveState(); render(); showToast("✅ Tarea agregada");
+  // Programar notificación si tiene hora
+  if(newTask.time && state.notifSettings?.taskReminders) {
+    scheduleTaskNotification(newTask);
+  }
 }
 function toggleTask(id) {
   const now=new Date();
@@ -1897,7 +1940,8 @@ async function runAI() {
   const billsPend=state.billsToPay.filter(b=>!b.paid).map(b=>b.name+" ("+money(b.amount,b.currency)+")").join(", ")||"Ninguna";
   const topObj=state.objectives.map(o=>`${o.name}: ${Math.round(Number(o.current)/Math.max(1,Number(o.target))*100)}%`).join(", ")||"Sin objetivos";
   const cfHoy=cashFlowToday();
-  const systemContext=`Eres el asistente financiero personal de ${state.userName}, dueño de Cedano Business.
+  const nombre=getDisplayName();
+  const systemContext=`Eres el asistente financiero personal de ${nombre}, dueño de Cedano Business.
 Datos actuales (${today()}):
 - Capital: ${money(state.capital)} | Ahorros: ${money(state.savings)}
 - Generado hoy: ${money(state.moneyToday)} / Meta: ${money(state.moneyGoal)} (${progress()}%)
@@ -1978,11 +2022,12 @@ function exportCSV(type) {
 }
 
 function printReport() {
+  const nombre=getDisplayName();
   const win=window.open("","_blank","width=800,height=900");
   if(!win) return;
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte Cedano Business</title>
   <style>body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:780px;margin:0 auto}h1{color:#0a7a34;border-bottom:2px solid #0a7a34;padding-bottom:10px}h2{color:#0a7a34;margin-top:24px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}th{background:#0a7a34;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #ddd}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}.metric{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center}.metric .val{font-size:22px;font-weight:900;color:#0a7a34}.footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;text-align:center}</style></head><body>
-  <h1>📊 Reporte Cedano Business v6</h1>
+  <h1>📊 Reporte Cedano Business v6 — ${esc(nombre)}</h1>
   <p>Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</p>
   <div class="grid"><div class="metric"><div class="val">${money(state.capital)}</div><div>Capital efectivo</div></div><div class="metric"><div class="val">${money(patrimonyTotal())}</div><div>Patrimonio total</div></div><div class="metric"><div class="val">${money(totalBillsPending())}</div><div>Por pagar</div></div></div>
   <h2>💵 Préstamos (${state.loans.length})</h2>
@@ -2004,6 +2049,10 @@ function resetData() {
   state=structuredClone(initialState); pinUnlocked=true; aiHistory=[]; saveState(); render();
 }
 
+// ══════════════════════════════════════════════════════════════════
+// NOTIFICACIONES PUSH — TAREAS Y RECORDATORIOS
+// ══════════════════════════════════════════════════════════════════
+
 let _notifSW = null;
 let _notifCheckInterval = null;
 
@@ -2014,6 +2063,7 @@ async function registerSW() {
     _notifSW = reg; return reg;
   } catch(e) { console.warn('[SW] Error:', e.message); return null; }
 }
+
 async function requestNotifPermission() {
   if (!('Notification' in window)) { showToast('Notificaciones no soportadas','err'); return false; }
   if (Notification.permission === 'granted') return true;
@@ -2021,62 +2071,173 @@ async function requestNotifPermission() {
   const result = await Notification.requestPermission();
   return result === 'granted';
 }
+
 async function sendNotification(title, body, tag) {
   const reg = _notifSW || await registerSW(); if (!reg) return;
   const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
   worker.postMessage({ type: 'SHOW_NOTIFICATION', title, body, tag });
 }
+
+// Programar notificación para una tarea específica según su hora
+function scheduleTaskNotification(task) {
+  if (!task.time || !task.date) return;
+  if (Notification.permission !== 'granted') return;
+
+  // Parsear hora (soporta "10:00 AM", "14:00", etc.)
+  let hours = 0, minutes = 0;
+  const timeStr = task.time.trim();
+  const ampmMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  const h24Match = timeStr.match(/^(\d+):(\d+)$/);
+
+  if (ampmMatch) {
+    hours = parseInt(ampmMatch[1]);
+    minutes = parseInt(ampmMatch[2]);
+    const ampm = ampmMatch[3].toUpperCase();
+    if (ampm === 'PM' && hours < 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+  } else if (h24Match) {
+    hours = parseInt(h24Match[1]);
+    minutes = parseInt(h24Match[2]);
+  } else {
+    return; // hora no reconocida
+  }
+
+  const taskDate = new Date(task.date + 'T' + String(hours).padStart(2,'0') + ':' + String(minutes).padStart(2,'0') + ':00');
+  const now = new Date();
+  const diff = taskDate.getTime() - now.getTime();
+
+  if (diff <= 0) return; // ya pasó la hora
+
+  // Notificación 15 minutos antes
+  const diffMinus15 = diff - 15 * 60 * 1000;
+  if (diffMinus15 > 0) {
+    setTimeout(() => {
+      if (!task.done) {
+        sendNotification(
+          '⏰ Tarea en 15 min',
+          task.text,
+          'task-remind-' + task.id
+        );
+      }
+    }, diffMinus15);
+  }
+
+  // Notificación en el momento exacto
+  setTimeout(() => {
+    if (!task.done) {
+      sendNotification(
+        '✅ Tarea ahora',
+        task.text,
+        'task-now-' + task.id
+      );
+    }
+  }, diff);
+}
+
+// Reprogramar todas las tareas pendientes al abrir la app
+function scheduleAllPendingTasks() {
+  if (!state.notifSettings?.taskReminders) return;
+  if (Notification.permission !== 'granted') return;
+  const pendientes = state.tasks.filter(t => !t.done && t.time && t.date === today());
+  pendientes.forEach(t => scheduleTaskNotification(t));
+}
+
 async function checkAndNotify() {
   if (Notification.permission !== 'granted') return;
   const reg = _notifSW || await registerSW(); if (!reg) return;
   const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
-  worker.postMessage({type:'CHECK_AND_NOTIFY',state:{loans:state.loans||[],barberAppointments:state.barberAppointments||[],billsToPay:state.billsToPay||[]},hora:new Date().getHours()});
+  worker.postMessage({
+    type: 'CHECK_AND_NOTIFY',
+    state: {
+      loans: state.loans || [],
+      barberAppointments: state.barberAppointments || [],
+      billsToPay: state.billsToPay || [],
+      tasks: state.tasks || []
+    },
+    hora: new Date().getHours()
+  });
 }
+
 function scheduleNotifChecks() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
   _notifCheckInterval = setInterval(checkAndNotify, 30 * 60 * 1000);
   setTimeout(checkAndNotify, 8000);
 }
+
 async function activateNotifications() {
   const reg = await registerSW();
   if (!reg) { showToast('❌ Notificaciones no soportadas','err'); return; }
   const granted = await requestNotifPermission(); if (!granted) return;
-  state.notifSettings = { ...state.notifSettings, pushEnabled: true };
-  saveState(); scheduleNotifChecks(); showToast('🔔 Notificaciones activadas');
-  setTimeout(() => sendNotification('✅ Cedano Business','Las notificaciones están activas.','cedano-test'), 1000);
+  state.notifSettings = { ...state.notifSettings, pushEnabled: true, taskReminders: true };
+  saveState();
+  scheduleNotifChecks();
+  scheduleAllPendingTasks();
+  render();
+  showToast('🔔 Notificaciones activadas');
+  setTimeout(() => sendNotification('✅ Cedano Business', 'Las notificaciones están activas. Recibirás recordatorios de tareas y cobros.', 'cedano-test'), 1000);
 }
+
 function deactivateNotifications() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
-  state.notifSettings = { ...state.notifSettings, pushEnabled: false };
+  state.notifSettings = { ...state.notifSettings, pushEnabled: false, taskReminders: false };
   saveState(); render(); showToast('🔕 Notificaciones desactivadas');
 }
+
 async function initNotifications() {
   if (!state.notifSettings?.pushEnabled) return;
   if (Notification.permission !== 'granted') return;
-  await registerSW(); scheduleNotifChecks();
+  await registerSW();
+  scheduleNotifChecks();
+  scheduleAllPendingTasks();
 }
+
+async function testNotification() {
+  if (Notification.permission !== 'granted') { const ok = await requestNotifPermission(); if (!ok) return; }
+  await sendNotification('🧠 Cedano Business', '¡Las notificaciones funcionan correctamente!', 'cedano-prueba');
+  showToast('🔔 Notificación enviada');
+}
+
+// ── RENDER NOTIF CARD — CORREGIDA (sin template literals anidados problemáticos) ──
 function renderNotifCard() {
   const enabled = state.notifSettings?.pushEnabled;
   const support = 'Notification' in window && 'serviceWorker' in navigator;
   const permDenied = 'Notification' in window && Notification.permission === 'denied';
-  return card('🔔 Notificaciones Push', `
-    ${!support ? `<p class="muted" style="font-size:13px">❌ Usa Chrome en Android o instala la app como PWA en iPhone.</p>`
-    : permDenied ? `<p class="muted" style="font-size:13px">⚠ Bloqueadas. Actívalas en Configuración del navegador → Permisos.</p>`
-    : `<p class="muted" style="font-size:13px;margin-bottom:10px">Recibe avisos de cobros, citas y cuentas — incluso con la app cerrada.</p>
-       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
-         <span style="font-size:13px">🔴 Cobros pendientes / morosos</span>
-         <span style="font-size:13px">✂ Citas de barbería del día</span>
-         <span style="font-size:13px">💳 Cuentas por pagar vencidas</span>
-       </div>
-       ${enabled ? `<div style="background:rgba(34,212,104,.1);border:1.5px solid rgba(34,212,104,.3);border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;color:var(--neon);font-weight:700">✅ Notificaciones activas</div>${btn('🔕 Desactivar','deactivateNotifications()','secondary')}` : btn('🔔 Activar notificaciones','activateNotifications()')}
-       ${btn('🧪 Enviar prueba','testNotification()','secondary')}`}
-  `);
+
+  let bodyContent = '';
+
+  if (!support) {
+    bodyContent = '<p class="muted" style="font-size:13px">❌ Usa Chrome en Android o instala la app como PWA en iPhone.</p>';
+  } else if (permDenied) {
+    bodyContent = '<p class="muted" style="font-size:13px">⚠ Bloqueadas. Actívalas en Configuración del navegador → Permisos.</p>';
+  } else {
+    const statusBox = enabled
+      ? '<div style="background:rgba(34,212,104,.1);border:1.5px solid rgba(34,212,104,.3);border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;color:var(--neon);font-weight:700">✅ Notificaciones activas — incluso con la app cerrada</div>'
+      : '';
+
+    const mainBtn = enabled
+      ? btn('🔕 Desactivar', 'deactivateNotifications()', 'secondary')
+      : btn('🔔 Activar notificaciones', 'activateNotifications()');
+
+    bodyContent = [
+      '<p class="muted" style="font-size:13px;margin-bottom:10px">Recibe avisos aunque tengas la app cerrada.</p>',
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">',
+      '<span style="font-size:13px">🔴 Cobros pendientes / morosos</span>',
+      '<span style="font-size:13px">✅ Recordatorio de tus tareas</span>',
+      '<span style="font-size:13px">✂ Citas de barbería del día</span>',
+      '<span style="font-size:13px">💳 Cuentas por pagar vencidas</span>',
+      '</div>',
+      statusBox,
+      mainBtn,
+      btn('🧪 Enviar notificación de prueba', 'testNotification()', 'secondary')
+    ].join('');
+  }
+
+  return card('🔔 Notificaciones Push', bodyContent);
 }
-async function testNotification() {
-  if (Notification.permission !== 'granted') { const ok = await requestNotifPermission(); if (!ok) return; }
-  await sendNotification('🧠 Cedano Business','¡Las notificaciones funcionan correctamente!','cedano-prueba');
-  showToast('🔔 Notificación enviada');
-}
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
 
 document.body.classList.toggle("light-mode", !darkMode);
 checkDayReset();
@@ -2095,4 +2256,5 @@ window._cedanoRenderSafetyNet = setTimeout(() => {
     if (typeof render === 'function') render();
   }
 }, 8000);
+
 initSupabase();
