@@ -1536,7 +1536,7 @@ function renderObjetivos() {
         </div>
         <div class="row">
           ${inp("objAdd-"+obj.id,"Agregar ahorro...","number")}
-          ${sm("➕ Abonar","addToObjective('"+obj.id+"')","green")}
+          ${sm("➕ Abonar",`addToObjective('${obj.id}')`,"green")}
           ${sm("🗑","deleteObjective('"+obj.id+"')","red")}
         </div>
       </div>`;
