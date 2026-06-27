@@ -1489,7 +1489,8 @@ function renderGastosPersonales() {
     ${state.personalExpenses.length?[...state.personalExpenses].reverse().slice(0,15).map(e=>`
       <div class="flujo-row">
         <div><strong>${esc(e.description||e.category)}</strong><p class="muted" style="font-size:11px">${esc(e.category)} · ${esc(e.date)}</p></div>
-        <div style="text-align:right;flex-shrink:0"><span style="color:var(--danger);font-weight:900">${money(e.amount)}</span><br/>${sm("🗑","deletePersonalExpense('"+e.id+"')","red")}</div>
+        <div style="text-align:right;flex-shrink:0"><span style="color:var(--danger);font-weight:900">${money(e.amount)}</span><br/>${sm("🗑",`deletePersonalExpense('${e.id}')`,"red")}
+</div>
       </div>`).join(""):`<div class="empty">Sin gastos registrados</div>`}`;
 }
 
