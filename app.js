@@ -1,3 +1,4 @@
+cat > /mnt/user-data/outputs/app.js << 'ENDOFFILE'
 /* =====================================================================
    CEDANO BUSINESS v6.0 — app.js COMPLETO CORREGIDO
    + Notificaciones push de tareas
@@ -2258,3 +2259,5 @@ window._cedanoRenderSafetyNet = setTimeout(() => {
 }, 8000);
 
 initSupabase();
+ENDOFFILE
+echo "app.js generado: $(wc -l < /mnt/user-data/outputs/app.js) líneas"
