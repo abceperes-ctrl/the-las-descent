@@ -29,7 +29,6 @@ function metric(icon, title, val, sub, cls="") {
   return `<article class="card metric${cls?" "+cls:""}"><div class="title">${icon} ${title}</div><div class="value">${esc(String(val))}</div><div class="muted">${sub}</div></article>`;
 }
 
-/* ── Toast ── */
 function showToast(msg, type="ok") {
   const existing = document.getElementById("cedano-toast");
   if (existing) existing.remove();
@@ -52,9 +51,6 @@ function hideSkeleton() {
   if (sk) sk.remove();
 }
 
-/* =====================================================================
-   ESTADO INICIAL v6
-   ===================================================================== */
 const initialState = {
   userName: "Royer", businessName: "Cedano Business",
   capital: 1250000, savings: 50000,
@@ -142,21 +138,19 @@ const initialState = {
   notifSettings: { loanOverdueDays: 3, lowStockDefault: 3, pushEnabled: false }
 };
 
-/* ── Variables globales ── */
 let state = loadState();
 let currentTab = "Inicio";
 let chartInstances = {};
 let calendarMonth = new Date().getMonth();
 let calendarYear = new Date().getFullYear();
 let pinUnlocked = !state.pinEnabled;
-let darkMode = localStorage.getItem("CEDANO_THEME") !== "light";
+let darkMode = (() => { try { return localStorage.getItem("CEDANO_THEME") !== "light"; } catch { return true; } })();
 let editingId = null;
 let editingType = null;
 let focusModeActive = false;
 let loanCurrency = "RD$";
 let subTabs = {};
 
-/* ── Historial IA persistente ── */
 let aiHistory = [];
 function loadAIHistory() {
   try { aiHistory = JSON.parse(localStorage.getItem("CEDANO_AI_HIST") || "[]"); } catch { aiHistory = []; }
@@ -166,15 +160,11 @@ function saveAIHistory() {
 }
 loadAIHistory();
 
-/* =====================================================================
-   CARGA Y GUARDADO DE ESTADO
-   ===================================================================== */
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
     const oldV5 = JSON.parse(localStorage.getItem("CEDANO_V5") || "null");
     const base = saved || oldV5 || structuredClone(initialState);
-
     if (!base.archivedLoans) base.archivedLoans = [];
     if (!base.prevMonthRevenue) base.prevMonthRevenue = [28000,40000,46000,34000,60000,65000];
     if (!base.notifSettings) base.notifSettings = { loanOverdueDays: 3, lowStockDefault: 3, pushEnabled: false };
@@ -190,7 +180,6 @@ function loadState() {
     if (!base.personalBudgets) base.personalBudgets = initialState.personalBudgets;
     if (!base.objectives) base.objectives = initialState.objectives;
     if (!base.cashFlowEntries) base.cashFlowEntries = [];
-
     base.habits = base.habits.map(h => ({ lastDone: "", ...h }));
     base.tasks = base.tasks.map(t => ({ completedAt: "", ...t }));
     base.vaperInventory = base.vaperInventory.map(p => ({ minStock: 3, ...p }));
@@ -202,8 +191,7 @@ function loadState() {
 
 function saveState() {
   state._updatedAt = new Date().toISOString();
-  localStorage.setItem(KEY, JSON.stringify(state));
-
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
   if (window._cedanoSaveTimeout) clearTimeout(window._cedanoSaveTimeout);
   window._cedanoSaveTimeout = setTimeout(async () => {
     if (typeof window.saveUserDataToSupabase === 'function') {
@@ -213,13 +201,9 @@ function saveState() {
 }
 function setState(patch) { state = { ...state, ...patch }; saveState(); render(); }
 
-/* =====================================================================
-   RESET DIARIO
-   ===================================================================== */
 function checkDayReset() {
   const todayStr = today();
   if (state.lastOpenDate === todayStr) return;
-
   if (state.lastOpenDate && state.lastOpenDate !== todayStr) {
     const yesterday = {
       date: state.lastOpenDate,
@@ -236,10 +220,8 @@ function checkDayReset() {
     state.history = [yesterday, ...state.history.filter(h => h.date !== yesterday.date)].slice(0, 90);
     state.dailyRevenue = [...state.dailyRevenue.slice(1), state.moneyToday];
   }
-
   state.moneyToday = 0; state.moneySpent = 0;
   state.productiveHours = 0; state.dailyNote = "";
-
   const todayDate = new Date(todayStr);
   state.habits = state.habits.map(h => {
     let newStreak = h.streak;
@@ -251,13 +233,11 @@ function checkDayReset() {
     }
     return { ...h, done: false, streak: newStreak };
   });
-
   state.tasks = state.tasks.map(t => ({
     ...t,
     done: t.type !== "Diario" ? t.done : false,
     completedAt: t.type !== "Diario" ? t.completedAt : ""
   }));
-
   state.billsToPay = state.billsToPay.map(b => b.recurring ? { ...b, paid: false, paidDate: "" } : b);
   state.lastOpenDate = todayStr;
   saveState();
@@ -315,9 +295,6 @@ function checkBirthdays() {
   if (hoy.length) setTimeout(() => showToast(`🎂 Cumpleaños hoy: ${hoy.map(c=>c.name).join(", ")}`), 4000);
 }
 
-/* =====================================================================
-   CÁLCULOS
-   ===================================================================== */
 function completedTasks() { return state.tasks.filter(t => t.done).length; }
 function pendingTasks()   { return state.tasks.filter(t => !t.done).length; }
 function progress()       { return state.moneyGoal ? Math.min(100, Math.round(state.moneyToday / state.moneyGoal * 100)) : 0; }
@@ -390,22 +367,11 @@ function notifCount() {
   return mora + stock + bills + birthdays;
 }
 
-/* =====================================================================
-   MORNING BRIEF
-   ===================================================================== */
-
-/* ── NUEVO: obtener nombre real del usuario ── */
 function getGreetingName() {
   const user = window._cedanoCurrentUser;
-  if (state.userName && state.userName.trim() && state.userName !== "Cedano") {
-    return state.userName.trim();
-  }
-  if (user?.user_metadata?.display_name) {
-    return user.user_metadata.display_name.split(" ")[0];
-  }
-  if (user?.email) {
-    return user.email.split("@")[0];
-  }
+  if (state.userName && state.userName.trim() && state.userName !== "Cedano") return state.userName.trim();
+  if (user?.user_metadata?.display_name) return user.user_metadata.display_name.split(" ")[0];
+  if (user?.email) return user.email.split("@")[0];
   return state.userName || "Usuario";
 }
 
@@ -416,11 +382,8 @@ function getMorningBrief() {
   const citasHoy   = state.barberAppointments.filter(a => a.date === today() && !a.completed);
   const billsVenc  = billsOverdue();
   const birthdays  = state.barberClients.filter(c=>c.birthday&&c.birthday.slice(5)===today().slice(5));
-
-  /* ── SALUDO CON NOMBRE REAL ── */
   const nombre   = getGreetingName();
   const greeting = (h < 12 ? "Buenos días" : h < 18 ? "Buenas tardes" : "Buenas noches") + ", " + nombre;
-
   const focus = h < 12 ? "Hora de atacar el día. Revisa tus cobros y hábitos."
     : h < 17 ? "Tarde productiva. ¿Ya completaste tu misión?"
     : "Últimas horas del día. Cierra fuerte.";
@@ -434,9 +397,6 @@ function getMorningBrief() {
   return { greeting, focus, items };
 }
 
-/* =====================================================================
-   TABS
-   ===================================================================== */
 const tabs = [["Inicio","⌂"],["Mi Día","⚑"],["Negocios","$"],["Vaper","☁"],["Barbería","✂"],["Finanzas","💳"],["Imperio","♛"]];
 
 function renderTabs() {
@@ -454,9 +414,6 @@ function go(tab)              { currentTab = tab; subTabs = {}; render(); }
 function setSubTab(mod, tab)  { subTabs[mod] = tab; render(); }
 function destroyCharts()      { Object.values(chartInstances).forEach(c=>{try{c.destroy();}catch{}}); chartInstances={}; }
 
-/* =====================================================================
-   PIN
-   ===================================================================== */
 let pinEntry = "";
 function renderPin() {
   return `<div class="pin-screen" id="pinScreen">
@@ -473,9 +430,8 @@ function pinPress(k) {
   else if (k!=="") pinEntry += k;
   updatePinDots();
   if (pinEntry.length===4) {
-    if (pinEntry===state.pin) {
-      pinUnlocked=true; pinEntry=""; rebuildDOM(); render();
-    } else {
+    if (pinEntry===state.pin) { pinUnlocked=true; pinEntry=""; rebuildDOM(); render(); }
+    else {
       const e = document.getElementById("pinError");
       if (e) e.textContent = "PIN incorrecto";
       pinEntry=""; updatePinDots();
@@ -487,31 +443,16 @@ function updatePinDots() {
   [0,1,2,3].forEach(i=>{ const d=document.getElementById("pd"+i); if(d) d.className="pin-dot"+(pinEntry.length>i?" filled":""); });
 }
 
-/* =====================================================================
-   REBUILD DOM
-   ===================================================================== */
 function rebuildDOM() {
   document.body.innerHTML = `
     <main class="app"><section id="screen"></section></main>
     <nav class="tabs" id="tabs" role="navigation" aria-label="Navegación principal"></nav>
     <button class="fab-note" onclick="openQuickNote()" aria-label="Nota rápida" title="Nota rápida">✏</button>
-
-    <div class="modal" id="quickNoteModal" role="dialog" aria-modal="true">
-      <div class="modal-inner"><div class="modal-head"><h2 style="color:var(--neon)">✏ Nota rápida</h2><button onclick="closeModal('quickNoteModal')">×</button></div><div id="quickNoteContent"></div></div></div>
-
-    <div class="modal" id="searchModal" role="dialog" aria-modal="true">
-      <div class="modal-inner"><div class="modal-head"><h2>🔍 Búsqueda global</h2><button onclick="closeModal('searchModal')">×</button></div>
-      <div id="searchContent"><input id="globalSearchInput" placeholder="Buscar..." oninput="runGlobalSearch(this.value)"/>
-      <div id="globalSearchResults" style="margin-top:12px"></div></div></div></div>
-
-    <div class="modal" id="nightModal" role="dialog" aria-modal="true">
-      <div class="modal-inner"><div class="modal-head"><h2>🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div><div id="nightContent"></div></div></div>
-
-    <div class="modal" id="editModal" role="dialog" aria-modal="true">
-      <div class="modal-inner"><div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div><div id="editContent"></div></div></div>
-
-    <div class="modal" id="aiModal" role="dialog" aria-modal="true">
-      <div class="modal-inner"><div class="modal-head"><h2>🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div>
+    <div class="modal" id="quickNoteModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2 style="color:var(--neon)">✏ Nota rápida</h2><button onclick="closeModal('quickNoteModal')">×</button></div><div id="quickNoteContent"></div></div></div>
+    <div class="modal" id="searchModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🔍 Búsqueda global</h2><button onclick="closeModal('searchModal')">×</button></div><div id="searchContent"><input id="globalSearchInput" placeholder="Buscar..." oninput="runGlobalSearch(this.value)"/><div id="globalSearchResults" style="margin-top:12px"></div></div></div></div>
+    <div class="modal" id="nightModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🌙 Cierre Nocturno</h2><button onclick="closeNightSummary()">×</button></div><div id="nightContent"></div></div></div>
+    <div class="modal" id="editModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2 id="editTitle">Editar</h2><button onclick="closeEditModal()">×</button></div><div id="editContent"></div></div></div>
+    <div class="modal" id="aiModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>🧠 IA Cedano</h2><button onclick="closeAI()">×</button></div>
       <div id="aiContent">
         <input id="aiInput" placeholder="Pregunta sobre tu negocio..." aria-label="Pregunta para la IA"/>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px">
@@ -529,23 +470,13 @@ function rebuildDOM() {
         <button class="btn" style="margin-top:10px" onclick="runAI()">Preguntar ›</button>
         <div id="aiChatHistory" style="margin-top:14px;display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto"></div>
       </div></div></div>
-
-    <div class="modal" id="payHistModal" role="dialog" aria-modal="true">
-      <div class="modal-inner"><div class="modal-head"><h2>💳 Historial de pagos</h2><button onclick="closeModal('payHistModal')">×</button></div><div id="payHistContent"></div></div></div>
-
-    <div class="modal" id="onboardModal" role="dialog" aria-modal="true" style="z-index:60">
-      <div class="modal-inner"><div class="modal-head"><h2>👋 Bienvenido a Cedano Business v6</h2><button onclick="closeOnboard()">×</button></div><div id="onboardContent"></div></div></div>`;
+    <div class="modal" id="payHistModal" role="dialog" aria-modal="true"><div class="modal-inner"><div class="modal-head"><h2>💳 Historial de pagos</h2><button onclick="closeModal('payHistModal')">×</button></div><div id="payHistContent"></div></div></div>
+    <div class="modal" id="onboardModal" role="dialog" aria-modal="true" style="z-index:60"><div class="modal-inner"><div class="modal-head"><h2>👋 Bienvenido a Cedano Business v6</h2><button onclick="closeOnboard()">×</button></div><div id="onboardContent"></div></div></div>`;
 }
 
-/* =====================================================================
-   MODALES
-   ===================================================================== */
 function openModal(id)  { const m=document.getElementById(id); if(m) m.classList.add("open"); }
 function closeModal(id) { const m=document.getElementById(id); if(m) m.classList.remove("open"); }
 
-/* =====================================================================
-   NOTAS RÁPIDAS
-   ===================================================================== */
 function openQuickNote() {
   const el = document.getElementById("quickNoteContent"); if (!el) return;
   el.innerHTML = `
@@ -560,7 +491,7 @@ function openQuickNote() {
               <p style="font-size:14px;line-height:1.5">${esc(n.text)}</p>
               <p class="muted" style="font-size:11px;margin-top:2px">${esc(n.date)} ${esc(n.time)}</p>
             </div>
-            ${sm("🗑","deleteQuickNote('"+n.id+"')","red")}
+            ${sm("🗑",`deleteQuickNote('${n.id}')`,"red")}
           </div>`).join("")}
       </div>` : ""}`;
   openModal("quickNoteModal");
@@ -574,9 +505,6 @@ function saveQuickNote() {
 }
 function deleteQuickNote(id) { state.quickNotes=state.quickNotes.filter(n=>n.id!==id); saveState(); openQuickNote(); }
 
-/* =====================================================================
-   ONBOARDING
-   ===================================================================== */
 const onboardSteps = [
   { icon:"💰", title:"Negocios", desc:"Gestiona tus contactos de préstamos y haz seguimiento sin duplicar trabajo con tu app principal." },
   { icon:"☁", title:"Módulo Vaper", desc:"Controla inventario, registra ventas y recibe alertas cuando el stock esté bajo." },
@@ -606,9 +534,6 @@ function nextOnboard() { onboardStep++; renderOnboardStep(); }
 function prevOnboard() { onboardStep--; renderOnboardStep(); }
 function closeOnboard() { state.onboardingDone=true; saveState(); closeModal("onboardModal"); }
 
-/* =====================================================================
-   BÚSQUEDA GLOBAL
-   ===================================================================== */
 function openSearch() { openModal("searchModal"); setTimeout(()=>document.getElementById("globalSearchInput")?.focus(),80); }
 function runGlobalSearch(q) {
   const el=document.getElementById("globalSearchResults"); if(!el) return;
@@ -629,9 +554,6 @@ function runGlobalSearch(q) {
     </div>`).join("");
 }
 
-/* =====================================================================
-   RENDER PRINCIPAL
-   ===================================================================== */
 function render() {
   if (state.pinEnabled && !pinUnlocked) { document.body.innerHTML = renderPin(); return; }
   if (!document.getElementById("screen")) rebuildDOM();
@@ -654,9 +576,6 @@ function render() {
   checkNightAlert();
 }
 
-/* =====================================================================
-   MODO ENFOQUE
-   ===================================================================== */
 function toggleFocusMode() { focusModeActive=!focusModeActive; render(); }
 function renderFocusMode() {
   const pendientes=state.tasks.filter(t=>!t.done);
@@ -695,7 +614,6 @@ function header() {
   const user = window._cedanoCurrentUser;
   const userEmail = user?.email || '';
   const userInitial = userEmail ? userEmail[0].toUpperCase() : '?';
-
   return `<div class="topbar">
     <button class="icon-btn" onclick="openSearch()" aria-label="Búsqueda global">🔍</button>
     <div class="brand">CEDANO BUSINESS</div>
@@ -703,56 +621,29 @@ function header() {
     <button class="icon-btn" onclick="openAI()" aria-label="Abrir IA" style="position:relative">
       🧠${nc > 0 ? `<span class="topbar-badge">${nc}</span>` : ''}
     </button>
-    <button class="icon-btn" onclick="showUserMenu()"
-      style="background:var(--neon);color:#000;font-weight:900;font-size:14px"
-      title="${userEmail}">
-      ${userInitial}
-    </button>
+    <button class="icon-btn" onclick="showUserMenu()" style="background:var(--neon);color:#000;font-weight:900;font-size:14px" title="${userEmail}">${userInitial}</button>
   </div>`;
 }
+
 function showUserMenu() {
   const existing = document.getElementById('user-menu-popup');
   if (existing) { existing.remove(); return; }
-
   const user = window._cedanoCurrentUser;
   const email = user?.email || '';
   const name  = window.state?.userName || '';
-
   const menu = document.createElement('div');
   menu.id = 'user-menu-popup';
-  menu.style.cssText = `
-    position:fixed;top:58px;right:14px;
-    background:var(--card);border:1.5px solid var(--line);
-    border-radius:12px;padding:14px;min-width:230px;
-    z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);
-    animation:fadeIn .15s ease;
-  `;
+  menu.style.cssText = `position:fixed;top:58px;right:14px;background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:14px;min-width:230px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);animation:fadeIn .15s ease;`;
   menu.innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;
-                padding-bottom:12px;border-bottom:1px solid var(--line)">
-      <div style="width:40px;height:40px;border-radius:50%;background:var(--neon);
-                  display:flex;align-items:center;justify-content:center;
-                  font-weight:900;font-size:18px;color:#000;flex-shrink:0">
-        ${email[0]?.toUpperCase() || '?'}
-      </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--neon);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;color:#000;flex-shrink:0">${email[0]?.toUpperCase() || '?'}</div>
       <div style="min-width:0">
         ${name ? `<p style="font-weight:800;font-size:14px;margin:0">${esc(name)}</p>` : ''}
         <p style="color:var(--muted);font-size:12px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(email)}</p>
       </div>
     </div>
-    <button onclick="document.getElementById('user-menu-popup').remove();go('Imperio')"
-      style="display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;
-             background:none;border:none;cursor:pointer;color:var(--text);
-             font-family:inherit;font-size:13px;font-weight:600;margin-bottom:4px">
-      ⚙ Configuración
-    </button>
-    <button onclick="document.getElementById('user-menu-popup').remove();cerrarSesion()"
-      style="display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;
-             background:none;border:none;cursor:pointer;color:var(--danger);
-             font-family:inherit;font-size:13px;font-weight:700">
-      🚪 Cerrar sesión
-    </button>
-  `;
+    <button onclick="document.getElementById('user-menu-popup').remove();go('Imperio')" style="display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;background:none;border:none;cursor:pointer;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;margin-bottom:4px">⚙ Configuración</button>
+    <button onclick="document.getElementById('user-menu-popup').remove();cerrarSesion()" style="display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;background:none;border:none;cursor:pointer;color:var(--danger);font-family:inherit;font-size:13px;font-weight:700">🚪 Cerrar sesión</button>`;
   document.body.appendChild(menu);
   setTimeout(() => {
     document.addEventListener('click', function close(e) {
@@ -760,14 +651,13 @@ function showUserMenu() {
     });
   }, 50);
 }
+
 function toggleTheme() {
-  darkMode=!darkMode; localStorage.setItem("CEDANO_THEME",darkMode?"dark":"light");
+  darkMode=!darkMode;
+  try { localStorage.setItem("CEDANO_THEME",darkMode?"dark":"light"); } catch {}
   document.body.classList.toggle("light-mode",!darkMode);
 }
 
-/* =====================================================================
-   HOME
-   ===================================================================== */
 function renderHome() {
   const brief=getMorningBrief();
   const missing=Math.max(0,state.moneyGoal-state.moneyToday);
@@ -777,14 +667,10 @@ function renderHome() {
   const overdueAlert=state.loans.filter(l=>calcLateDays(l)>=(state.notifSettings?.loanOverdueDays||3));
   const billsVencidas=billsOverdue();
   const cf=cashFlowToday();
-
   return `${header()}
     <div class="morning-brief">
       <div class="brief-header">
-        <div>
-          <h2 class="brief-greeting">${esc(brief.greeting)} 👋</h2>
-          <p class="brief-focus">${brief.focus}</p>
-        </div>
+        <div><h2 class="brief-greeting">${esc(brief.greeting)} 👋</h2><p class="brief-focus">${brief.focus}</p></div>
         <button class="focus-mode-btn" onclick="toggleFocusMode()" title="Modo Enfoque">⚡</button>
       </div>
       <div class="brief-items">${brief.items.map(item=>`<div class="brief-item">${item}</div>`).join("")}</div>
@@ -823,9 +709,6 @@ function renderHome() {
     ${card("📖 Verso del Día",`<p style="font-style:italic;margin-bottom:6px;color:var(--muted)">Porque yo sé los planes que tengo para vosotros.</p><p class="green" style="font-weight:700">— Jeremías 29:11</p>`)}`;
 }
 
-/* =====================================================================
-   MI DÍA
-   ===================================================================== */
 function renderMyDay() {
   const habitsCompleted=state.habits.filter(h=>h.done).length;
   const disciplineToday=Math.round(habitsCompleted/Math.max(1,state.habits.length)*100);
@@ -839,7 +722,7 @@ function renderMyDay() {
         <div class="habit-check">${h.done?"✓":""}</div>
         <div style="flex:1"><span>${esc(h.text)}</span>${h.lastDone?`<p class="muted" style="font-size:11px;margin-top:2px">Última vez: ${esc(h.lastDone)}</p>`:""}</div>
         <span class="pill green" style="margin-left:auto">${h.streak}🔥</span>
-        ${sm("🗑","deleteHabit('"+h.id+"')","red")}
+        ${sm("🗑",`deleteHabit('${h.id}')`,"red")}
       </div>`).join("")+inp("newHabitInput","Agregar hábito")+btn("Agregar hábito","addHabit()"))}
     ${card("📊 Estadísticas",`<div class="grid-3">
       <div class="card metric"><div class="title">🏋 Gym</div><div class="value">${state.habitStats.daysTraining}</div><div class="muted">días seguidos</div></div>
@@ -878,9 +761,6 @@ function taskHTML(task) {
   </div>`;
 }
 
-/* =====================================================================
-   NEGOCIOS
-   ===================================================================== */
 function renderNegocios() {
   const st=subTabs["negocios"]||"contactos";
   const tabs2=[["contactos","📇 Contactos"],["clientes","👤 Clientes"],["prestamos","💵 Préstamos"]];
@@ -952,7 +832,7 @@ function renderPrestamosTab() {
       ${state.archivedLoans.map(l=>`<article class="card" style="opacity:.65">
         <span class="title">✅ ${esc(l.client)} <span class="pill green">Cancelado</span></span>
         <p>Capital: ${money(l.capital,l.currency)} | Cobrado: ${money(l.paid,l.currency)}</p>
-        ${sm("🗑","deleteArchivedLoan('"+l.id+"')","red")}
+        ${sm("🗑",`deleteArchivedLoan('${l.id}')`,"red")}
       </article>`).join("")}`:""}`;
 }
 
@@ -973,12 +853,10 @@ function renderPayHistory(filter) {
 
 function setCurrency(cur) {
   loanCurrency=cur;
-  const btnRD  = document.getElementById("btnRD");
-  const btnUSD = document.getElementById("btnUSD");
-  const row    = document.getElementById("usdRateRow");
-  if (btnRD)  btnRD.className  = "currency-btn" + (cur==="RD$"?" active":"");
-  if (btnUSD) btnUSD.className = "currency-btn" + (cur==="USD"?" active":"");
-  if (row)    row.style.display = cur==="USD" ? "block" : "none";
+  const btnRD=document.getElementById("btnRD"); const btnUSD=document.getElementById("btnUSD"); const row=document.getElementById("usdRateRow");
+  if(btnRD) btnRD.className="currency-btn"+(cur==="RD$"?" active":"");
+  if(btnUSD) btnUSD.className="currency-btn"+(cur==="USD"?" active":"");
+  if(row) row.style.display=cur==="USD"?"block":"none";
 }
 function updateUsdRate() {
   const val=Number(document.getElementById("usdRateLive")?.value||0); if(!val) return;
@@ -1016,8 +894,8 @@ function clientHTML(c) {
     <p class="muted">${esc(c.notes)}</p>
     ${clientLoans.map(l=>`<div style="margin-top:8px"><span class="status-badge ${loanStatusClass(l.status)}">${loanStatusDot(l.status)} ${l.status}</span> <span class="muted">Balance: ${loanBalanceMoney(l)}</span></div>`).join("")}
     <div class="row" style="margin-top:10px">
-      ${sm("✏ Editar","openEdit('loanClient','"+c.id+"')","")}
-      ${sm("🗑","deleteRecord('loanClient','"+c.id+"')","red")}
+      ${sm("✏ Editar",`openEdit('loanClient','${c.id}')`)}
+      ${sm("🗑",`deleteRecord('loanClient','${c.id}')`,"red")}
     </div>
   </article>`;
 }
@@ -1029,12 +907,12 @@ function contactHTML(c) {
     <p class="muted">${esc(c.note||"")}</p>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"><span class="pill green">${c.priority}</span><span class="pill">${c.status}</span></div>
     <div class="row" style="margin-top:10px">
-      ${sm("💬 WA","whatsappCobro('"+c.id+"')","green")}
-      ${c.status!=="Convertido"?sm("➕ Crear cliente","convertContact('"+c.id+"')","green"):""}
-      ${sm("🗑","deleteContact('"+c.id+"')","red")}
+      ${sm("💬 WA",`whatsappCobro('${c.id}')`,"green")}
+      ${c.status!=="Convertido"?sm("➕ Crear cliente",`convertContact('${c.id}')`,"green"):""}
+      ${sm("🗑",`deleteContact('${c.id}')`,"red")}
     </div>
     ${sel("status-"+c.id,["Pendiente","Llamado","Visitado","Interesado","No interesado","Convertido"],c.status)}
-    ${btn("Cambiar estado","updateContactStatus('"+c.id+"')","")}
+    ${btn("Cambiar estado","updateContactStatus('"+c.id+"')")}
   </article>`;
 }
 
@@ -1086,12 +964,12 @@ function loanHTML(loan) {
       </div>
     </details>
     ${sel("loanstatus-"+loan.id,["Al día","En riesgo","En mora","Cancelado"],loan.status)}
-    ${btn("Actualizar estado","updateLoanStatus('"+loan.id+"')","")}
+    ${btn("Actualizar estado",`updateLoanStatus('${loan.id}')`)}
     <div class="row" style="margin-top:8px">
-      ${sm("✏ Editar","openEdit('loan','"+loan.id+"')","")}
-      ${sm("💬 WA","whatsappLoan('"+loan.id+"')","green")}
-      ${loanBalance(loan)===0?sm("📁 Archivar","archiveLoan('"+loan.id+"')"):""}
-      ${sm("🗑","deleteRecord('loan','"+loan.id+"')","red")}
+      ${sm("✏ Editar",`openEdit('loan','${loan.id}')`)}
+      ${sm("💬 WA",`whatsappLoan('${loan.id}')`,"green")}
+      ${loanBalance(loan)===0?sm("📁 Archivar",`archiveLoan('${loan.id}')`):""}
+      ${sm("🗑",`deleteRecord('loan','${loan.id}')`,"red")}
     </div>
   </article>`;
 }
@@ -1134,10 +1012,13 @@ function whatsappAllMorosos() {
   });
   showToast(`💬 Abriendo WA para ${morosos.length} clientes...`);
 }
+function updateLoanStatus(id) {
+  const status=document.getElementById("loanstatus-"+id)?.value;
+  if(status==="Cancelado"){ archiveLoan(id); return; }
+  state.loans=state.loans.map(l=>l.id===id?{...l,status}:l);
+  saveState(); render();
+}
 
-/* =====================================================================
-   VAPER
-   ===================================================================== */
 function renderVaper() {
   const st=subTabs["vaper"]||"inventario";
   const tabs2=[["inventario","📦 Inventario"],["ventas","🛒 Ventas"],["clientes","👥 Clientes"]];
@@ -1192,7 +1073,7 @@ function renderVaper() {
         ${state.vaperClients.map(cl=>`<div class="list-item" style="display:flex;justify-content:space-between;align-items:flex-start">
           <div><strong>${esc(cl.name)}</strong> <span class="muted">${esc(cl.phone)}</span>
           <p class="muted">${esc(cl.history)}</p><p class="green">Total: ${money(cl.totalSpent)}</p></div>
-          ${sm("🗑","deleteRecord('vaperClient','"+cl.id+"')","red")}
+          ${sm("🗑",`deleteRecord('vaperClient','${cl.id}')`,"red")}
         </div>`).join("")}`)}`:""}`;
 }
 
@@ -1209,15 +1090,12 @@ function vaperProductHTML(p) {
     <p>Cantidad: <strong>${p.quantity}</strong> uds. | Costo: ${money(p.cost)} → Venta: ${money(p.price)}</p>
     <p class="green">Ganancia/ud: ${money(gain)} | Valor inventario: ${money(Number(p.quantity)*Number(p.cost))}</p>
     <div class="row" style="margin-top:8px">
-      ${sm("✏ Editar","openEdit('vaperProduct','"+p.id+"')","")}
-      ${sm("🗑","deleteRecord('vaperProduct','"+p.id+"')","red")}
+      ${sm("✏ Editar",`openEdit('vaperProduct','${p.id}')`)}
+      ${sm("🗑",`deleteRecord('vaperProduct','${p.id}')`,"red")}
     </div>
   </article>`;
 }
 
-/* =====================================================================
-   BARBERÍA
-   ===================================================================== */
 function renderBarber() {
   const st=subTabs["barber"]||"agenda";
   const tabs2=[["agenda","📅 Agenda"],["clientes","👥 Clientes"],["servicios","💈 Servicios"],["empleados","👷 Empleados"]];
@@ -1246,10 +1124,10 @@ function renderBarber() {
           <p>${esc(a.service)} | ${esc(a.date)} ${esc(a.time)}</p>
           <p class="green" style="font-weight:700">${money(a.price)}</p>
           <div class="row" style="margin-top:8px">
-            ${!a.completed?sm("✅ Completar","completeBarberApt('"+a.id+"')","green"):""}
-            ${sm("💬 WA","whatsappBarber('"+a.id+"')","green")}
-            ${sm("✏","openEdit('barberApt','"+a.id+"')","")}
-            ${sm("🗑","deleteRecord('barberApt','"+a.id+"')","red")}
+            ${!a.completed?sm("✅ Completar",`completeBarberApt('${a.id}')`,"green"):""}
+            ${sm("💬 WA",`whatsappBarber('${a.id}')`,"green")}
+            ${sm("✏",`openEdit('barberApt','${a.id}')`)}
+            ${sm("🗑",`deleteRecord('barberApt','${a.id}')`,"red")}
           </div>
         </article>`).join("")}
       </div>
@@ -1279,7 +1157,11 @@ function renderBarber() {
               <p class="muted" style="font-size:12px;margin-top:3px">${esc(cl.frequency||"")} | ${esc(cl.phone||"")}</p>
               ${cl.cutNotes?`<p class="muted" style="font-size:12px">✂ ${esc(cl.cutNotes)}</p>`:""}
             </div>
-            <div class="row">${sm("💬","whatsappBarberClient('"+cl.id+"')","green")}${sm("✏","openEdit('barberClient','"+cl.id+"')","")}${sm("🗑","deleteRecord('barberClient','"+cl.id+"')","red")}</div>
+            <div class="row">
+              ${sm("💬",`whatsappBarberClient('${cl.id}')`,"green")}
+              ${sm("✏",`openEdit('barberClient','${cl.id}')`)}
+              ${sm("🗑",`deleteRecord('barberClient','${cl.id}')`,"red")}
+            </div>
           </div>
         </div>`).join("")}
       </div>` : ""}
@@ -1289,7 +1171,7 @@ function renderBarber() {
         ${btn("Agregar servicio","addBarberService()")}
         ${state.barberServices.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding:9px 0">
           <span class="pill green">${esc(s.name)} • ${money(s.price)} • ${esc(s.duration)}</span>
-          ${sm("🗑","deleteRecord('barberService','"+s.id+"')","red")}
+          ${sm("🗑",`deleteRecord('barberService','${s.id}')`,"red")}
         </div>`).join("")}`)}` : ""}
     ${st==="empleados"?`
       ${card("👷 Empleados",`
@@ -1304,7 +1186,7 @@ function renderBarber() {
             <p class="muted" style="font-size:12px">${esc(e.schedule||"")}</p>
             <p>Ingresos: ${money(empIncome)} | Comisión: <strong class="green">${money(empCommission)}</strong></p>
             <p>Pagado: ${money(e.paid)} | Pendiente: <strong class="green">${money(empCommission-Number(e.paid||0))}</strong></p></div>
-            ${sm("🗑","deleteRecord('employee','"+e.id+"')","red")}
+            ${sm("🗑",`deleteRecord('employee','${e.id}')`,"red")}
           </div>`;
         }).join("")}`)}` : ""}`;
 }
@@ -1314,8 +1196,8 @@ function barberAptMiniHTML(a) {
     <div><strong>${esc(a.client)}</strong> — ${esc(a.service)} <span class="muted">${esc(a.time)}</span></div>
     <div style="display:flex;align-items:center;gap:6px">
       <span class="pill green">${money(a.price)}</span>
-      ${a.completed?`<span class="pill green">✅</span>`:sm("✅","completeBarberApt('"+a.id+"')","green")}
-      ${sm("💬","whatsappBarber('"+a.id+"')","green")}
+      ${a.completed?`<span class="pill green">✅</span>`:sm("✅",`completeBarberApt('${a.id}')`,"green")}
+      ${sm("💬",`whatsappBarber('${a.id}')`,"green")}
     </div>
   </div>`;
 }
@@ -1334,7 +1216,7 @@ function filterBarber() {
     <span class="title">✂ ${esc(a.client)}</span>
     <p>${esc(a.service)} | ${esc(a.date)} ${esc(a.time)}</p>
     <p class="green">${money(a.price)}</p>
-    <div class="row">${sm("🗑","deleteRecord('barberApt','"+a.id+"')","red")}</div>
+    <div class="row">${sm("🗑",`deleteRecord('barberApt','${a.id}')`,"red")}</div>
   </article>`).join("");
 }
 function whatsappBarber(aptId) {
@@ -1348,9 +1230,6 @@ function whatsappBarberClient(clientId) {
   window.open(`https://wa.me/${(c.phone||"").replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");
 }
 
-/* =====================================================================
-   FINANZAS
-   ===================================================================== */
 function renderFinanzas() {
   const st=subTabs["finanzas"]||"flujo";
   const tabs2=[["flujo","💰 Flujo de Caja"],["cuentas","💳 Cuentas x Pagar"],["gastos","📊 Gastos Personales"],["objetivos","🎯 Objetivos"]];
@@ -1429,8 +1308,8 @@ function renderCuentasPagar() {
         <div style="text-align:right;flex-shrink:0">
           <strong style="color:var(--danger);font-size:15px">${money(b.amount,b.currency)}</strong><br/>
           <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end">
-            ${sm("✅","markBillPaid('"+b.id+"')","green")}
-            ${sm("🗑","deleteBill('"+b.id+"')","red")}
+            ${sm("✅",`markBillPaid('${b.id}')`,"green")}
+            ${sm("🗑",`deleteBill('${b.id}')`,"red")}
           </div>
         </div>
       </div>`;
@@ -1489,8 +1368,10 @@ function renderGastosPersonales() {
     ${state.personalExpenses.length?[...state.personalExpenses].reverse().slice(0,15).map(e=>`
       <div class="flujo-row">
         <div><strong>${esc(e.description||e.category)}</strong><p class="muted" style="font-size:11px">${esc(e.category)} · ${esc(e.date)}</p></div>
-        <div style="text-align:right;flex-shrink:0"><span style="color:var(--danger);font-weight:900">${money(e.amount)}</span><br/>${sm("🗑",`deletePersonalExpense('${e.id}')`,"red")}
-</div>
+        <div style="text-align:right;flex-shrink:0">
+          <span style="color:var(--danger);font-weight:900">${money(e.amount)}</span><br/>
+          ${sm("🗑",`deletePersonalExpense('${e.id}')`,"red")}
+        </div>
       </div>`).join(""):`<div class="empty">Sin gastos registrados</div>`}`;
 }
 
@@ -1562,9 +1443,6 @@ function deleteObjective(id) {
   saveState(); render();
 }
 
-/* =====================================================================
-   IMPERIO
-   ===================================================================== */
 function renderImperio() {
   const total=patrimonyTotal();
   const xpPct=Math.min(100,Math.round(state.xp/nextRankXP()*100));
@@ -1726,14 +1604,7 @@ function initCharts() {
   const months=["Ene","Feb","Mar","Abr","May","Jun"];
   const tickColor="rgba(107,127,143,.8)";
   const gridColor="rgba(30,42,53,.8)";
-  const baseOpts={
-    responsive:true,maintainAspectRatio:false,
-    plugins:{legend:{display:false}},
-    scales:{
-      x:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:11}}},
-      y:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:11},callback:v=>"RD$"+Number(v).toLocaleString()}}
-    }
-  };
+  const baseOpts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:11}}},y:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:11},callback:v=>"RD$"+Number(v).toLocaleString()}}}};
   const dEl=document.getElementById("chartDaily");
   if(dEl) chartInstances.daily=new Chart(dEl,{type:"bar",data:{labels:days,datasets:[{data:state.dailyRevenue,backgroundColor:"rgba(34,212,104,.75)",borderRadius:7,borderSkipped:false}]},options:{...baseOpts}});
   const mEl=document.getElementById("chartMonthly");
@@ -1747,130 +1618,65 @@ function initCharts() {
   }
 }
 
-/* =====================================================================
-   EDIT MODAL
-   ===================================================================== */
 function openEdit(type, id) {
   editingType=type; editingId=id;
-  const m=document.getElementById("editModal");
-  const h=document.getElementById("editTitle");
-  const c=document.getElementById("editContent");
+  const m=document.getElementById("editModal"); const h=document.getElementById("editTitle"); const c=document.getElementById("editContent");
   if(!m||!h||!c) return;
   if(type==="task"){
     const t=state.tasks.find(x=>x.id===id); if(!t) return;
     h.textContent="✏ Editar tarea";
-    c.innerHTML=`<div class="edit-form">
-      <label>Texto</label>${inp("eText","Texto","text",t.text)}
-      <label>Tipo</label>${sel("eType",["Diario","Semanal","Mensual"],t.type)}
-      <label>Prioridad</label>${sel("ePriority",["Baja","Media","Alta","Urgente"],t.priority)}
-      <label>Fecha</label>${inp("eDate","Fecha","text",t.date)}
-      <label>Hora</label>${inp("eTime","Hora","text",t.time)}
-      ${btn("Guardar cambios","saveEdit()")}
-    </div>`;
+    c.innerHTML=`<div class="edit-form"><label>Texto</label>${inp("eText","Texto","text",t.text)}<label>Tipo</label>${sel("eType",["Diario","Semanal","Mensual"],t.type)}<label>Prioridad</label>${sel("ePriority",["Baja","Media","Alta","Urgente"],t.priority)}<label>Fecha</label>${inp("eDate","Fecha","text",t.date)}<label>Hora</label>${inp("eTime","Hora","text",t.time)}${btn("Guardar cambios","saveEdit()")}</div>`;
   } else if(type==="loan"){
     const l=state.loans.find(x=>x.id===id); if(!l) return;
     h.textContent="✏ Editar préstamo";
-    c.innerHTML=`<div class="edit-form">
-      <label>Cliente</label>${inp("eClient","Cliente","text",l.client)}
-      <label>Capital</label>${inp("eCapital","Capital","number",l.capital)}
-      <label>Interés %</label>${inp("eInterest","Interés","number",l.interest)}
-      <label>Fecha inicio</label>${inp("eStart","Fecha inicio","text",l.startDate)}
-      <label>Fecha vencimiento</label>${inp("eDue","Fecha vencimiento","text",l.dueDate)}
-      <label>Frecuencia</label>${sel("eFreq",["Diario","Semanal","Quincenal","Mensual"],l.frequency)}
-      <label>Pagado</label>${inp("ePaid","Monto pagado","number",l.paid)}
-      ${btn("Guardar cambios","saveEdit()")}
-    </div>`;
+    c.innerHTML=`<div class="edit-form"><label>Cliente</label>${inp("eClient","Cliente","text",l.client)}<label>Capital</label>${inp("eCapital","Capital","number",l.capital)}<label>Interés %</label>${inp("eInterest","Interés","number",l.interest)}<label>Fecha inicio</label>${inp("eStart","Fecha inicio","text",l.startDate)}<label>Fecha vencimiento</label>${inp("eDue","Fecha vencimiento","text",l.dueDate)}<label>Frecuencia</label>${sel("eFreq",["Diario","Semanal","Quincenal","Mensual"],l.frequency)}<label>Pagado</label>${inp("ePaid","Monto pagado","number",l.paid)}${btn("Guardar cambios","saveEdit()")}</div>`;
   } else if(type==="loanClient"){
     const c2=state.loanClients.find(x=>x.id===id); if(!c2) return;
     h.textContent="✏ Editar cliente";
-    c.innerHTML=`<div class="edit-form">
-      <label>Nombre</label>${inp("eName","Nombre","text",c2.name)}
-      <label>Cédula</label>${inp("eCedula","Cédula","text",c2.cedula)}
-      <label>Teléfono</label>${inp("ePhone","Teléfono","text",c2.phone)}
-      <label>Dirección</label>${inp("eAddress","Dirección","text",c2.address)}
-      <label>Referencia</label>${inp("eRef","Referencia","text",c2.reference)}
-      <label>Notas</label>${ta("eNotes","Notas",c2.notes)}
-      ${btn("Guardar cambios","saveEdit()")}
-    </div>`;
+    c.innerHTML=`<div class="edit-form"><label>Nombre</label>${inp("eName","Nombre","text",c2.name)}<label>Cédula</label>${inp("eCedula","Cédula","text",c2.cedula)}<label>Teléfono</label>${inp("ePhone","Teléfono","text",c2.phone)}<label>Dirección</label>${inp("eAddress","Dirección","text",c2.address)}<label>Referencia</label>${inp("eRef","Referencia","text",c2.reference)}<label>Notas</label>${ta("eNotes","Notas",c2.notes)}${btn("Guardar cambios","saveEdit()")}</div>`;
   } else if(type==="vaperProduct"){
     const p=state.vaperInventory.find(x=>x.id===id); if(!p) return;
     h.textContent="✏ Editar producto";
-    c.innerHTML=`<div class="edit-form">
-      <label>Producto</label>${inp("eProd","Producto","text",p.product)}
-      <label>Marca</label>${inp("eBrand","Marca","text",p.brand)}
-      <label>Sabor</label>${inp("eFlavor","Sabor","text",p.flavor)}
-      <label>Cantidad</label>${inp("eQty","Cantidad","number",p.quantity)}
-      <label>Costo</label>${inp("eCost","Costo","number",p.cost)}
-      <label>Precio</label>${inp("ePrice","Precio","number",p.price)}
-      <label>Stock mínimo</label>${inp("eMinStock","Stock mínimo","number",p.minStock||3)}
-      ${btn("Guardar cambios","saveEdit()")}
-    </div>`;
+    c.innerHTML=`<div class="edit-form"><label>Producto</label>${inp("eProd","Producto","text",p.product)}<label>Marca</label>${inp("eBrand","Marca","text",p.brand)}<label>Sabor</label>${inp("eFlavor","Sabor","text",p.flavor)}<label>Cantidad</label>${inp("eQty","Cantidad","number",p.quantity)}<label>Costo</label>${inp("eCost","Costo","number",p.cost)}<label>Precio</label>${inp("ePrice","Precio","number",p.price)}<label>Stock mínimo</label>${inp("eMinStock","Stock mínimo","number",p.minStock||3)}${btn("Guardar cambios","saveEdit()")}</div>`;
   } else if(type==="barberApt"){
     const a=state.barberAppointments.find(x=>x.id===id); if(!a) return;
     h.textContent="✏ Editar cita";
-    c.innerHTML=`<div class="edit-form">
-      <label>Cliente</label>${inp("eClient","Cliente","text",a.client)}
-      <label>Servicio</label>${inp("eService","Servicio","text",a.service)}
-      <label>Fecha</label>${inp("eDate","Fecha","text",a.date)}
-      <label>Hora</label>${inp("eTime","Hora","text",a.time)}
-      <label>Precio</label>${inp("ePrice","Precio","number",a.price)}
-      ${btn("Guardar cambios","saveEdit()")}
-    </div>`;
+    c.innerHTML=`<div class="edit-form"><label>Cliente</label>${inp("eClient","Cliente","text",a.client)}<label>Servicio</label>${inp("eService","Servicio","text",a.service)}<label>Fecha</label>${inp("eDate","Fecha","text",a.date)}<label>Hora</label>${inp("eTime","Hora","text",a.time)}<label>Precio</label>${inp("ePrice","Precio","number",a.price)}${btn("Guardar cambios","saveEdit()")}</div>`;
   } else if(type==="barberClient"){
     const bc=state.barberClients.find(x=>x.id===id); if(!bc) return;
     h.textContent="✏ Editar cliente barbería";
-    c.innerHTML=`<div class="edit-form">
-      <label>Nombre</label>${inp("eBcName","Nombre","text",bc.name)}
-      <label>Teléfono</label>${inp("eBcPhone","Teléfono","text",bc.phone)}
-      <label>Historial</label>${ta("eBcHistory","Historial",bc.history)}
-      <label>Notas del estilo</label>${ta("eBcCutNotes","Notas del corte",bc.cutNotes||"")}
-      <label>Frecuencia</label>${inp("eBcFreq","Frecuencia","text",bc.frequency)}
-      <label>Cumpleaños</label>${inp("eBcBday","Cumpleaños","text",bc.birthday)}
-      ${btn("Guardar cambios","saveEdit()")}
-    </div>`;
+    c.innerHTML=`<div class="edit-form"><label>Nombre</label>${inp("eBcName","Nombre","text",bc.name)}<label>Teléfono</label>${inp("eBcPhone","Teléfono","text",bc.phone)}<label>Historial</label>${ta("eBcHistory","Historial",bc.history)}<label>Notas del estilo</label>${ta("eBcCutNotes","Notas del corte",bc.cutNotes||"")}<label>Frecuencia</label>${inp("eBcFreq","Frecuencia","text",bc.frequency)}<label>Cumpleaños</label>${inp("eBcBday","Cumpleaños","text",bc.birthday)}${btn("Guardar cambios","saveEdit()")}</div>`;
   }
   openModal("editModal");
 }
 function closeEditModal() { closeModal("editModal"); editingId=null; editingType=null; }
 function saveEdit() {
   const g = id => { const el=document.getElementById(id); return el?el.value:""; };
-  if(editingType==="task")
-    state.tasks=state.tasks.map(t=>t.id!==editingId?t:{...t,text:g("eText"),type:g("eType"),priority:g("ePriority"),date:g("eDate"),time:g("eTime")});
-  else if(editingType==="loan")
-    state.loans=state.loans.map(l=>l.id!==editingId?l:{...l,client:g("eClient"),capital:Number(g("eCapital")),interest:Number(g("eInterest")),startDate:g("eStart"),dueDate:g("eDue"),frequency:g("eFreq"),paid:Number(g("ePaid"))});
-  else if(editingType==="loanClient")
-    state.loanClients=state.loanClients.map(c=>c.id!==editingId?c:{...c,name:g("eName"),cedula:g("eCedula"),phone:g("ePhone"),address:g("eAddress"),reference:g("eRef"),notes:g("eNotes")});
-  else if(editingType==="vaperProduct")
-    state.vaperInventory=state.vaperInventory.map(p=>p.id!==editingId?p:{...p,product:g("eProd"),brand:g("eBrand"),flavor:g("eFlavor"),quantity:Number(g("eQty")),cost:Number(g("eCost")),price:Number(g("ePrice")),minStock:Number(g("eMinStock")||3)});
-  else if(editingType==="barberApt")
-    state.barberAppointments=state.barberAppointments.map(a=>a.id!==editingId?a:{...a,client:g("eClient"),service:g("eService"),date:g("eDate"),time:g("eTime"),price:Number(g("ePrice"))});
-  else if(editingType==="barberClient")
-    state.barberClients=state.barberClients.map(c=>c.id!==editingId?c:{...c,name:g("eBcName"),phone:g("eBcPhone"),history:g("eBcHistory"),cutNotes:g("eBcCutNotes"),frequency:g("eBcFreq"),birthday:g("eBcBday")});
+  if(editingType==="task") state.tasks=state.tasks.map(t=>t.id!==editingId?t:{...t,text:g("eText"),type:g("eType"),priority:g("ePriority"),date:g("eDate"),time:g("eTime")});
+  else if(editingType==="loan") state.loans=state.loans.map(l=>l.id!==editingId?l:{...l,client:g("eClient"),capital:Number(g("eCapital")),interest:Number(g("eInterest")),startDate:g("eStart"),dueDate:g("eDue"),frequency:g("eFreq"),paid:Number(g("ePaid"))});
+  else if(editingType==="loanClient") state.loanClients=state.loanClients.map(c=>c.id!==editingId?c:{...c,name:g("eName"),cedula:g("eCedula"),phone:g("ePhone"),address:g("eAddress"),reference:g("eRef"),notes:g("eNotes")});
+  else if(editingType==="vaperProduct") state.vaperInventory=state.vaperInventory.map(p=>p.id!==editingId?p:{...p,product:g("eProd"),brand:g("eBrand"),flavor:g("eFlavor"),quantity:Number(g("eQty")),cost:Number(g("eCost")),price:Number(g("ePrice")),minStock:Number(g("eMinStock")||3)});
+  else if(editingType==="barberApt") state.barberAppointments=state.barberAppointments.map(a=>a.id!==editingId?a:{...a,client:g("eClient"),service:g("eService"),date:g("eDate"),time:g("eTime"),price:Number(g("ePrice"))});
+  else if(editingType==="barberClient") state.barberClients=state.barberClients.map(c=>c.id!==editingId?c:{...c,name:g("eBcName"),phone:g("eBcPhone"),history:g("eBcHistory"),cutNotes:g("eBcCutNotes"),frequency:g("eBcFreq"),birthday:g("eBcBday")});
   saveState(); closeEditModal(); render(); showToast("✅ Cambios guardados");
 }
 
-/* =====================================================================
-   ELIMINAR
-   ===================================================================== */
 function deleteRecord(type, id) {
   if(!confirm("¿Eliminar este registro?")) return;
-  if(type==="task")          state.tasks=state.tasks.filter(x=>x.id!==id);
-  else if(type==="loan")     state.loans=state.loans.filter(x=>x.id!==id);
+  if(type==="task") state.tasks=state.tasks.filter(x=>x.id!==id);
+  else if(type==="loan") state.loans=state.loans.filter(x=>x.id!==id);
   else if(type==="loanClient") state.loanClients=state.loanClients.filter(x=>x.id!==id);
   else if(type==="vaperProduct") state.vaperInventory=state.vaperInventory.filter(x=>x.id!==id);
-  else if(type==="vaperClient")  state.vaperClients=state.vaperClients.filter(x=>x.id!==id);
-  else if(type==="barberApt")    state.barberAppointments=state.barberAppointments.filter(x=>x.id!==id);
+  else if(type==="vaperClient") state.vaperClients=state.vaperClients.filter(x=>x.id!==id);
+  else if(type==="barberApt") state.barberAppointments=state.barberAppointments.filter(x=>x.id!==id);
   else if(type==="barberClient") state.barberClients=state.barberClients.filter(x=>x.id!==id);
   else if(type==="barberService") state.barberServices=state.barberServices.filter(x=>x.id!==id);
-  else if(type==="employee")     state.barberEmployees=state.barberEmployees.filter(x=>x.id!==id);
+  else if(type==="employee") state.barberEmployees=state.barberEmployees.filter(x=>x.id!==id);
   saveState(); render();
 }
 function deleteHabit(id)  { state.habits=state.habits.filter(h=>h.id!==id); saveState(); render(); }
 function deleteContact(id){ state.contacts=state.contacts.filter(c=>c.id!==id); saveState(); render(); }
 
-/* =====================================================================
-   ACCIONES
-   ===================================================================== */
 function saveMission() {
   const v=document.getElementById("missionInput")?.value.trim();
   if(!v){ showToast("❌ Escribe una misión primero","err"); return; }
@@ -1878,19 +1684,11 @@ function saveMission() {
 }
 function completeMission() { setState({xp:state.xp+50}); showToast("⚔ +50 XP — ¡Misión completada!"); }
 function updatePatrimony() {
-  setState({
-    capital:Number(document.getElementById("capitalInput")?.value||state.capital),
-    savings:Number(document.getElementById("savingsInput")?.value||state.savings)
-  });
+  setState({capital:Number(document.getElementById("capitalInput")?.value||state.capital),savings:Number(document.getElementById("savingsInput")?.value||state.savings)});
   showToast("✅ Patrimonio actualizado");
 }
 function saveProfile() {
-  setState({
-    userName:document.getElementById("profileName")?.value||state.userName,
-    businessName:document.getElementById("profileBusiness")?.value||state.businessName,
-    capital:Number(document.getElementById("profileCapital")?.value||state.capital),
-    usdRate:Number(document.getElementById("usdRateInput")?.value||state.usdRate)
-  });
+  setState({userName:document.getElementById("profileName")?.value||state.userName,businessName:document.getElementById("profileBusiness")?.value||state.businessName,capital:Number(document.getElementById("profileCapital")?.value||state.capital),usdRate:Number(document.getElementById("usdRateInput")?.value||state.usdRate)});
   showToast("✅ Configuración guardada");
 }
 function saveNotifSettings() {
@@ -1914,14 +1712,7 @@ function toggleHabit(id) {
 }
 function addTask() {
   const text=document.getElementById("taskText")?.value.trim(); if(!text) return;
-  state.tasks.push({
-    id:uid(),text,
-    type:document.getElementById("taskType")?.value||"Diario",
-    date:document.getElementById("taskDate")?.value||"",
-    time:document.getElementById("taskTime")?.value||"",
-    priority:document.getElementById("taskPriority")?.value||"Media",
-    done:false,completedAt:""
-  });
+  state.tasks.push({id:uid(),text,type:document.getElementById("taskType")?.value||"Diario",date:document.getElementById("taskDate")?.value||"",time:document.getElementById("taskTime")?.value||"",priority:document.getElementById("taskPriority")?.value||"Media",done:false,completedAt:""});
   saveState(); render(); showToast("✅ Tarea agregada");
 }
 function toggleTask(id) {
@@ -1946,28 +1737,12 @@ function saveTomorrowPlan() {
 }
 function addLoanClient() {
   const name=document.getElementById("clientName")?.value.trim(); if(!name) return;
-  state.loanClients.push({
-    id:uid(),name,photo:"",
-    cedula:document.getElementById("clientCedula")?.value||"",
-    phone:document.getElementById("clientPhone")?.value||"",
-    address:document.getElementById("clientAddress")?.value||"",
-    reference:document.getElementById("clientReference")?.value||"",
-    notes:document.getElementById("clientNotes")?.value||"",
-    lastVisit:today()
-  });
+  state.loanClients.push({id:uid(),name,photo:"",cedula:document.getElementById("clientCedula")?.value||"",phone:document.getElementById("clientPhone")?.value||"",address:document.getElementById("clientAddress")?.value||"",reference:document.getElementById("clientReference")?.value||"",notes:document.getElementById("clientNotes")?.value||"",lastVisit:today()});
   saveState(); render(); showToast("✅ Cliente agregado");
 }
 function addContact() {
   const name=document.getElementById("contactName")?.value.trim(); if(!name) return;
-  state.contacts.push({
-    id:uid(),name,
-    phone:document.getElementById("contactPhone")?.value||"",
-    address:document.getElementById("contactAddress")?.value||"",
-    source:document.getElementById("contactSource")?.value||"",
-    note:document.getElementById("contactNote")?.value||"",
-    priority:document.getElementById("contactPriority")?.value||"Media",
-    status:"Pendiente"
-  });
+  state.contacts.push({id:uid(),name,phone:document.getElementById("contactPhone")?.value||"",address:document.getElementById("contactAddress")?.value||"",source:document.getElementById("contactSource")?.value||"",note:document.getElementById("contactNote")?.value||"",priority:document.getElementById("contactPriority")?.value||"Media",status:"Pendiente"});
   saveState(); render();
 }
 function updateContactStatus(id) {
@@ -1979,22 +1754,8 @@ function addLoan() {
   const client=document.getElementById("loanClient")?.value.trim();
   const capital=Number(document.getElementById("loanCapital")?.value);
   if(!client||!capital){ showToast("❌ Completa cliente y capital","err"); return; }
-  state.loans.push({
-    id:uid(),client,capital,
-    interest:Number(document.getElementById("loanInterest")?.value||0),
-    currency:loanCurrency,
-    startDate:document.getElementById("loanStartDate")?.value||today(),
-    dueDate:document.getElementById("loanDueDate")?.value||"",
-    frequency:document.getElementById("loanFrequency")?.value||"Semanal",
-    paid:0,lateDays:0,status:"Al día"
-  });
+  state.loans.push({id:uid(),client,capital,interest:Number(document.getElementById("loanInterest")?.value||0),currency:loanCurrency,startDate:document.getElementById("loanStartDate")?.value||today(),dueDate:document.getElementById("loanDueDate")?.value||"",frequency:document.getElementById("loanFrequency")?.value||"Semanal",paid:0,lateDays:0,status:"Al día"});
   saveState(); render(); showToast("✅ Préstamo registrado");
-}
-function updateLoanStatus(id) {
-  const status=document.getElementById("loanstatus-"+id)?.value;
-  if(status==="Cancelado"){ archiveLoan(id); return; }
-  state.loans=state.loans.map(l=>l.id===id?{...l,status}:l);
-  saveState(); render();
 }
 function addPayment() {
   const client=document.getElementById("paymentLoan")?.value.trim();
@@ -2014,17 +1775,7 @@ function addPayment() {
 }
 function addVaperProduct() {
   const product=document.getElementById("vpProduct")?.value.trim(); if(!product) return;
-  state.vaperInventory.push({
-    id:uid(),product,
-    brand:document.getElementById("vpBrand")?.value||"",
-    model:document.getElementById("vpModel")?.value||"",
-    type:document.getElementById("vpType")?.value||"Desechable",
-    flavor:document.getElementById("vpFlavor")?.value||"",
-    quantity:Number(document.getElementById("vpQty")?.value||0),
-    cost:Number(document.getElementById("vpCost")?.value||0),
-    price:Number(document.getElementById("vpPrice")?.value||0),
-    minStock:Number(document.getElementById("vpMinStock")?.value||3)
-  });
+  state.vaperInventory.push({id:uid(),product,brand:document.getElementById("vpBrand")?.value||"",model:document.getElementById("vpModel")?.value||"",type:document.getElementById("vpType")?.value||"Desechable",flavor:document.getElementById("vpFlavor")?.value||"",quantity:Number(document.getElementById("vpQty")?.value||0),cost:Number(document.getElementById("vpCost")?.value||0),price:Number(document.getElementById("vpPrice")?.value||0),minStock:Number(document.getElementById("vpMinStock")?.value||3)});
   saveState(); render(); showToast("✅ Producto agregado");
 }
 function addVaperSale() {
@@ -2036,33 +1787,17 @@ function addVaperSale() {
   if(Number(item.quantity)<qty){ showToast(`❌ Stock insuficiente (hay ${item.quantity})`,"err"); return; }
   const gain=(Number(item.price)-Number(item.cost))*qty;
   const income=Number(item.price)*qty;
-  state.vaperSales.push({
-    id:uid(),
-    client:document.getElementById("saleClient")?.value||"",
-    product:productName,quantity:qty,
-    date:document.getElementById("saleDate")?.value||today(),
-    method:document.getElementById("saleMethod")?.value||"Efectivo",
-    gain
-  });
+  state.vaperSales.push({id:uid(),client:document.getElementById("saleClient")?.value||"",product:productName,quantity:qty,date:document.getElementById("saleDate")?.value||today(),method:document.getElementById("saleMethod")?.value||"Efectivo",gain});
   item.quantity=Math.max(0,Number(item.quantity)-qty);
   state.moneyToday+=income;
   state.cashFlowEntries.push({id:uid(),type:"entrada",amount:income,description:`Venta vaper: ${productName}`,date:today(),category:"Vaper"});
-  if(state.vaperSales.length===1){
-    state.achievements=state.achievements.map(a=>a.id==="a1"?{...a,unlocked:true}:a);
-    showToast("🥉 ¡Logro desbloqueado: Primera venta!");
-  } else {
-    showToast(`✅ Venta registrada — ganancia ${money(gain)}`);
-  }
+  if(state.vaperSales.length===1){ state.achievements=state.achievements.map(a=>a.id==="a1"?{...a,unlocked:true}:a); showToast("🥉 ¡Logro desbloqueado: Primera venta!"); }
+  else showToast(`✅ Venta registrada — ganancia ${money(gain)}`);
   saveState(); render();
 }
 function addVaperClient() {
   const name=document.getElementById("vaperClientName")?.value.trim(); if(!name) return;
-  state.vaperClients.push({
-    id:uid(),name,
-    phone:document.getElementById("vaperClientPhone")?.value||"",
-    history:document.getElementById("vaperClientHistory")?.value||"",
-    totalSpent:0
-  });
+  state.vaperClients.push({id:uid(),name,phone:document.getElementById("vaperClientPhone")?.value||"",history:document.getElementById("vaperClientHistory")?.value||"",totalSpent:0});
   saveState(); render();
 }
 function addBarberAppointment() {
@@ -2070,46 +1805,22 @@ function addBarberAppointment() {
   const price=Number(document.getElementById("barberPrice")?.value||0);
   const empName=document.getElementById("barberEmployeeSel")?.value||"";
   const emp=state.barberEmployees.find(e=>e.name===empName);
-  state.barberAppointments.push({
-    id:uid(),client,
-    phone:document.getElementById("barberPhone")?.value||"",
-    service:document.getElementById("barberService")?.value||"",
-    date:document.getElementById("barberDate")?.value||today(),
-    time:document.getElementById("barberTime")?.value||"",
-    price,reminder:true,completed:false,
-    employeeId:emp?.id||""
-  });
+  state.barberAppointments.push({id:uid(),client,phone:document.getElementById("barberPhone")?.value||"",service:document.getElementById("barberService")?.value||"",date:document.getElementById("barberDate")?.value||today(),time:document.getElementById("barberTime")?.value||"",price,reminder:true,completed:false,employeeId:emp?.id||""});
   saveState(); render(); showToast("✅ Cita agendada");
 }
 function addBarberClient() {
   const name=document.getElementById("barberClientName")?.value.trim(); if(!name) return;
-  state.barberClients.push({
-    id:uid(),name,
-    phone:document.getElementById("barberClientPhone")?.value||"",
-    history:document.getElementById("barberClientHistory")?.value||"",
-    cutNotes:document.getElementById("barberClientCutNotes")?.value||"",
-    frequency:document.getElementById("barberClientFrequency")?.value||"",
-    birthday:document.getElementById("barberClientBirthday")?.value||""
-  });
+  state.barberClients.push({id:uid(),name,phone:document.getElementById("barberClientPhone")?.value||"",history:document.getElementById("barberClientHistory")?.value||"",cutNotes:document.getElementById("barberClientCutNotes")?.value||"",frequency:document.getElementById("barberClientFrequency")?.value||"",birthday:document.getElementById("barberClientBirthday")?.value||""});
   saveState(); render();
 }
 function addBarberService() {
   const name=document.getElementById("serviceName")?.value.trim(); if(!name) return;
-  state.barberServices.push({
-    id:uid(),name,
-    price:Number(document.getElementById("servicePrice")?.value||0),
-    duration:document.getElementById("serviceDuration")?.value||""
-  });
+  state.barberServices.push({id:uid(),name,price:Number(document.getElementById("servicePrice")?.value||0),duration:document.getElementById("serviceDuration")?.value||""});
   saveState(); render();
 }
 function addEmployee() {
   const name=document.getElementById("employeeName")?.value.trim(); if(!name) return;
-  state.barberEmployees.push({
-    id:uid(),name,
-    percent:Number(document.getElementById("employeePercent")?.value||0),
-    schedule:document.getElementById("employeeSchedule")?.value||"",
-    paid:Number(document.getElementById("employeePaid")?.value||0)
-  });
+  state.barberEmployees.push({id:uid(),name,percent:Number(document.getElementById("employeePercent")?.value||0),schedule:document.getElementById("employeeSchedule")?.value||"",paid:Number(document.getElementById("employeePaid")?.value||0)});
   saveState(); render();
 }
 function addBarberExpense() {
@@ -2121,9 +1832,6 @@ function addBarberExpense() {
   saveState(); render(); showToast(`💸 Gasto de ${money(amount)} registrado`);
 }
 
-/* =====================================================================
-   CIERRE NOCTURNO
-   ===================================================================== */
 function openNightSummary() {
   const reached=state.moneyToday>=state.moneyGoal;
   const items=["¿Cobré todo lo pendiente?","¿Entrené hoy?","¿Estudié Derecho?","¿Revisé el inventario?","¿Dormiré temprano?"];
@@ -2154,14 +1862,7 @@ function saveNightSummary() {
   const completed=completedTasks(); const pending=pendingTasks();
   const checks=["nc0","nc1","nc2","nc3","nc4"].filter(id=>document.getElementById(id)?.classList.contains("done")).length;
   const discipline=Math.round(checks/5*100);
-  const day={
-    date:today(),completed,pending,mission:state.mission,
-    moneyToday:state.moneyToday,moneySpent:state.moneySpent,
-    productiveHours:Number(document.getElementById("nightHours")?.value||0),
-    note:document.getElementById("nightNote")?.value||"",
-    discipline,
-    status:reached&&pending===0?"Excelente":reached?"Bueno":pending<=2?"Regular":"Malo"
-  };
+  const day={date:today(),completed,pending,mission:state.mission,moneyToday:state.moneyToday,moneySpent:state.moneySpent,productiveHours:Number(document.getElementById("nightHours")?.value||0),note:document.getElementById("nightNote")?.value||"",discipline,status:reached&&pending===0?"Excelente":reached?"Bueno":pending<=2?"Regular":"Malo"};
   state.history=[day,...state.history.filter(h=>h.date!==day.date)].slice(0,90);
   state.xp+=completed*10+checks*5;
   state.disciplineScore=discipline;
@@ -2172,9 +1873,6 @@ function saveNightSummary() {
   showToast("🌙 Cierre nocturno guardado");
 }
 
-/* =====================================================================
-   IA — Con historial persistente
-   ===================================================================== */
 function openAI()  { openModal("aiModal"); renderAIChat(); }
 function closeAI() { closeModal("aiModal"); }
 function askAI(q)  { const input=document.getElementById("aiInput"); if(input) input.value=q; runAI(); }
@@ -2223,16 +1921,7 @@ Responde en español, conciso y directo. Usa datos reales. Sé proactivo y da co
   loadingEl.innerHTML='<span class="ai-role">🧠 IA</span><span style="animation:pulse 1s infinite;color:var(--neon)">Analizando...</span>';
   if(chatEl) chatEl.appendChild(loadingEl);
   try{
-    const response=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({
-        model:"claude-sonnet-4-6",
-        max_tokens:1000,
-        system:systemContext,
-        messages:aiHistory.map(m=>({role:m.role,content:m.content}))
-      })
-    });
+    const response=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:systemContext,messages:aiHistory.map(m=>({role:m.role,content:m.content}))})});
     const data=await response.json();
     const text=data.content?.map(b=>b.text||"").join("")||"Sin respuesta.";
     aiHistory.push({role:"assistant",content:text}); saveAIHistory();
@@ -2244,9 +1933,6 @@ Responde en español, conciso y directo. Usa datos reales. Sé proactivo y da co
   }
 }
 
-/* =====================================================================
-   PIN
-   ===================================================================== */
 function savePin() {
   const p=document.getElementById("newPin")?.value;
   if(!p||p.length!==4||isNaN(p)){ showToast("❌ Ingresa exactamente 4 dígitos","err"); return; }
@@ -2258,9 +1944,6 @@ function disablePin() {
   saveState(); render(); showToast("PIN desactivado");
 }
 
-/* =====================================================================
-   BACKUP & CSV
-   ===================================================================== */
 function exportBackup() {
   state.lastBackupDate=today(); saveState();
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
@@ -2273,11 +1956,8 @@ function importBackup(input) {
   const file=input.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=e=>{
-    try{
-      const data=JSON.parse(e.target.result);
-      state={...initialState,...data}; saveState(); render();
-      showToast("✅ Backup restaurado");
-    }catch{ showToast("❌ Archivo inválido","err"); }
+    try{ const data=JSON.parse(e.target.result); state={...initialState,...data}; saveState(); render(); showToast("✅ Backup restaurado"); }
+    catch{ showToast("❌ Archivo inválido","err"); }
   };
   reader.readAsText(file);
 }
@@ -2301,41 +1981,18 @@ function printReport() {
   const win=window.open("","_blank","width=800,height=900");
   if(!win) return;
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte Cedano Business</title>
-  <style>
-    body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:780px;margin:0 auto}
-    h1{color:#0a7a34;border-bottom:2px solid #0a7a34;padding-bottom:10px}
-    h2{color:#0a7a34;margin-top:24px}
-    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
-    th{background:#0a7a34;color:#fff;padding:8px;text-align:left}
-    td{padding:7px 8px;border-bottom:1px solid #ddd}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}
-    .metric{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center}
-    .metric .val{font-size:22px;font-weight:900;color:#0a7a34}
-    .footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;text-align:center}
-  </style></head><body>
+  <style>body{font-family:Arial,sans-serif;padding:30px;color:#111;max-width:780px;margin:0 auto}h1{color:#0a7a34;border-bottom:2px solid #0a7a34;padding-bottom:10px}h2{color:#0a7a34;margin-top:24px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}th{background:#0a7a34;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #ddd}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:16px 0}.metric{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center}.metric .val{font-size:22px;font-weight:900;color:#0a7a34}.footer{margin-top:40px;border-top:1px solid #ddd;padding-top:12px;color:#888;font-size:12px;text-align:center}</style></head><body>
   <h1>📊 Reporte Cedano Business v6</h1>
   <p>Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</p>
-  <div class="grid">
-    <div class="metric"><div class="val">${money(state.capital)}</div><div>Capital efectivo</div></div>
-    <div class="metric"><div class="val">${money(patrimonyTotal())}</div><div>Patrimonio total</div></div>
-    <div class="metric"><div class="val">${money(totalBillsPending())}</div><div>Por pagar</div></div>
-  </div>
+  <div class="grid"><div class="metric"><div class="val">${money(state.capital)}</div><div>Capital efectivo</div></div><div class="metric"><div class="val">${money(patrimonyTotal())}</div><div>Patrimonio total</div></div><div class="metric"><div class="val">${money(totalBillsPending())}</div><div>Por pagar</div></div></div>
   <h2>💵 Préstamos (${state.loans.length})</h2>
-  <table><thead><tr><th>Cliente</th><th>Capital</th><th>Balance</th><th>Estado</th><th>Días atraso</th></tr></thead><tbody>
-    ${state.loans.map(l=>`<tr><td>${esc(l.client)}</td><td>${money(l.capital,l.currency)}</td><td>${loanBalanceMoney(l)}</td><td>${l.status}</td><td>${calcLateDays(l)}</td></tr>`).join("")}
-  </tbody></table>
+  <table><thead><tr><th>Cliente</th><th>Capital</th><th>Balance</th><th>Estado</th><th>Días atraso</th></tr></thead><tbody>${state.loans.map(l=>`<tr><td>${esc(l.client)}</td><td>${money(l.capital,l.currency)}</td><td>${loanBalanceMoney(l)}</td><td>${l.status}</td><td>${calcLateDays(l)}</td></tr>`).join("")}</tbody></table>
   <h2>💳 Cuentas por pagar</h2>
-  <table><thead><tr><th>Cuenta</th><th>Monto</th><th>Vencimiento</th><th>Estado</th></tr></thead><tbody>
-    ${state.billsToPay.map(b=>`<tr><td>${esc(b.name)}</td><td>${money(b.amount,b.currency)}</td><td>${esc(b.dueDate||"Sin fecha")}</td><td>${b.paid?"✅ Pagada":"⏳ Pendiente"}</td></tr>`).join("")}
-  </tbody></table>
+  <table><thead><tr><th>Cuenta</th><th>Monto</th><th>Vencimiento</th><th>Estado</th></tr></thead><tbody>${state.billsToPay.map(b=>`<tr><td>${esc(b.name)}</td><td>${money(b.amount,b.currency)}</td><td>${esc(b.dueDate||"Sin fecha")}</td><td>${b.paid?"✅ Pagada":"⏳ Pendiente"}</td></tr>`).join("")}</tbody></table>
   <h2>☁ Inventario Vaper</h2>
-  <table><thead><tr><th>Producto</th><th>Stock</th><th>Costo</th><th>Venta</th></tr></thead><tbody>
-    ${state.vaperInventory.map(p=>`<tr><td>${esc(p.product)}</td><td>${p.quantity}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td></tr>`).join("")}
-  </tbody></table>
+  <table><thead><tr><th>Producto</th><th>Stock</th><th>Costo</th><th>Venta</th></tr></thead><tbody>${state.vaperInventory.map(p=>`<tr><td>${esc(p.product)}</td><td>${p.quantity}</td><td>${money(p.cost)}</td><td>${money(p.price)}</td></tr>`).join("")}</tbody></table>
   <h2>🎯 Objetivos</h2>
-  <table><thead><tr><th>Objetivo</th><th>Meta</th><th>Ahorrado</th><th>Progreso</th></tr></thead><tbody>
-    ${state.objectives.map(o=>`<tr><td>${esc(o.icon)} ${esc(o.name)}</td><td>${money(o.target)}</td><td>${money(o.current)}</td><td>${o.target?Math.round(Number(o.current)/Number(o.target)*100):0}%</td></tr>`).join("")}
-  </tbody></table>
+  <table><thead><tr><th>Objetivo</th><th>Meta</th><th>Ahorrado</th><th>Progreso</th></tr></thead><tbody>${state.objectives.map(o=>`<tr><td>${esc(o.icon)} ${esc(o.name)}</td><td>${money(o.target)}</td><td>${money(o.current)}</td><td>${o.target?Math.round(Number(o.current)/Number(o.target)*100):0}%</td></tr>`).join("")}</tbody></table>
   <div class="footer">Cedano Business v6.0 — ${new Date().toLocaleDateString("es-DO")}</div>
   </body></html>`);
   win.document.close(); setTimeout(()=>win.print(),500);
@@ -2343,13 +2000,9 @@ function printReport() {
 
 function resetData() {
   if(!confirm("¿Seguro que quieres reiniciar todos los datos? Esta acción no se puede deshacer.")) return;
-  localStorage.removeItem(KEY); localStorage.removeItem("CEDANO_AI_HIST");
+  try { localStorage.removeItem(KEY); localStorage.removeItem("CEDANO_AI_HIST"); } catch {}
   state=structuredClone(initialState); pinUnlocked=true; aiHistory=[]; saveState(); render();
 }
-
-/* =====================================================================
-   SISTEMA DE NOTIFICACIONES PUSH LOCALES
-   ===================================================================== */
 
 let _notifSW = null;
 let _notifCheckInterval = null;
@@ -2358,14 +2011,9 @@ async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
   try {
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-    _notifSW = reg;
-    return reg;
-  } catch(e) {
-    console.warn('[SW] Error:', e.message);
-    return null;
-  }
+    _notifSW = reg; return reg;
+  } catch(e) { console.warn('[SW] Error:', e.message); return null; }
 }
-
 async function requestNotifPermission() {
   if (!('Notification' in window)) { showToast('Notificaciones no soportadas','err'); return false; }
   if (Notification.permission === 'granted') return true;
@@ -2373,99 +2021,63 @@ async function requestNotifPermission() {
   const result = await Notification.requestPermission();
   return result === 'granted';
 }
-
 async function sendNotification(title, body, tag) {
-  const reg = _notifSW || await registerSW();
-  if (!reg) return;
-  const worker = reg.active || reg.installing || reg.waiting;
-  if (!worker) return;
+  const reg = _notifSW || await registerSW(); if (!reg) return;
+  const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
   worker.postMessage({ type: 'SHOW_NOTIFICATION', title, body, tag });
 }
-
 async function checkAndNotify() {
   if (Notification.permission !== 'granted') return;
-  const reg = _notifSW || await registerSW();
-  if (!reg) return;
-  const worker = reg.active || reg.installing || reg.waiting;
-  if (!worker) return;
-  worker.postMessage({
-    type: 'CHECK_AND_NOTIFY',
-    state: {
-      loans: state.loans || [],
-      barberAppointments: state.barberAppointments || [],
-      billsToPay: state.billsToPay || []
-    },
-    hora: new Date().getHours()
-  });
+  const reg = _notifSW || await registerSW(); if (!reg) return;
+  const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
+  worker.postMessage({type:'CHECK_AND_NOTIFY',state:{loans:state.loans||[],barberAppointments:state.barberAppointments||[],billsToPay:state.billsToPay||[]},hora:new Date().getHours()});
 }
-
 function scheduleNotifChecks() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
   _notifCheckInterval = setInterval(checkAndNotify, 30 * 60 * 1000);
   setTimeout(checkAndNotify, 8000);
 }
-
 async function activateNotifications() {
   const reg = await registerSW();
   if (!reg) { showToast('❌ Notificaciones no soportadas','err'); return; }
-  const granted = await requestNotifPermission();
-  if (!granted) return;
+  const granted = await requestNotifPermission(); if (!granted) return;
   state.notifSettings = { ...state.notifSettings, pushEnabled: true };
-  saveState();
-  scheduleNotifChecks();
-  showToast('🔔 Notificaciones activadas');
+  saveState(); scheduleNotifChecks(); showToast('🔔 Notificaciones activadas');
   setTimeout(() => sendNotification('✅ Cedano Business','Las notificaciones están activas.','cedano-test'), 1000);
 }
-
 function deactivateNotifications() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
   state.notifSettings = { ...state.notifSettings, pushEnabled: false };
   saveState(); render(); showToast('🔕 Notificaciones desactivadas');
 }
-
 async function initNotifications() {
   if (!state.notifSettings?.pushEnabled) return;
   if (Notification.permission !== 'granted') return;
-  await registerSW();
-  scheduleNotifChecks();
+  await registerSW(); scheduleNotifChecks();
 }
-
 function renderNotifCard() {
   const enabled = state.notifSettings?.pushEnabled;
   const support = 'Notification' in window && 'serviceWorker' in navigator;
   const permDenied = 'Notification' in window && Notification.permission === 'denied';
   return card('🔔 Notificaciones Push', `
-    ${!support
-      ? `<p class="muted" style="font-size:13px">❌ Usa Chrome en Android o instala la app como PWA en iPhone.</p>`
-      : permDenied
-      ? `<p class="muted" style="font-size:13px">⚠ Bloqueadas. Actívalas en Configuración del navegador → Permisos.</p>`
-      : `<p class="muted" style="font-size:13px;margin-bottom:10px">Recibe avisos de cobros, citas y cuentas — incluso con la app cerrada.</p>
-         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
-           <span style="font-size:13px">🔴 Cobros pendientes / morosos</span>
-           <span style="font-size:13px">✂ Citas de barbería del día</span>
-           <span style="font-size:13px">💳 Cuentas por pagar vencidas</span>
-         </div>
-         ${enabled
-           ? `<div style="background:rgba(34,212,104,.1);border:1.5px solid rgba(34,212,104,.3);border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;color:var(--neon);font-weight:700">✅ Notificaciones activas</div>
-              ${btn('🔕 Desactivar','deactivateNotifications()','secondary')}`
-           : btn('🔔 Activar notificaciones','activateNotifications()')
-         }
-         ${btn('🧪 Enviar prueba','testNotification()','secondary')}`
-    }
+    ${!support ? `<p class="muted" style="font-size:13px">❌ Usa Chrome en Android o instala la app como PWA en iPhone.</p>`
+    : permDenied ? `<p class="muted" style="font-size:13px">⚠ Bloqueadas. Actívalas en Configuración del navegador → Permisos.</p>`
+    : `<p class="muted" style="font-size:13px;margin-bottom:10px">Recibe avisos de cobros, citas y cuentas — incluso con la app cerrada.</p>
+       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+         <span style="font-size:13px">🔴 Cobros pendientes / morosos</span>
+         <span style="font-size:13px">✂ Citas de barbería del día</span>
+         <span style="font-size:13px">💳 Cuentas por pagar vencidas</span>
+       </div>
+       ${enabled ? `<div style="background:rgba(34,212,104,.1);border:1.5px solid rgba(34,212,104,.3);border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;color:var(--neon);font-weight:700">✅ Notificaciones activas</div>${btn('🔕 Desactivar','deactivateNotifications()','secondary')}` : btn('🔔 Activar notificaciones','activateNotifications()')}
+       ${btn('🧪 Enviar prueba','testNotification()','secondary')}`}
   `);
 }
-
 async function testNotification() {
-  if (Notification.permission !== 'granted') {
-    const ok = await requestNotifPermission(); if (!ok) return;
-  }
+  if (Notification.permission !== 'granted') { const ok = await requestNotifPermission(); if (!ok) return; }
   await sendNotification('🧠 Cedano Business','¡Las notificaciones funcionan correctamente!','cedano-prueba');
   showToast('🔔 Notificación enviada');
 }
 
-/* =====================================================================
-   INIT
-   ===================================================================== */
 document.body.classList.toggle("light-mode", !darkMode);
 checkDayReset();
 checkBackupReminder();
