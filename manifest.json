@@ -1,13 +1,21 @@
 {
   "name": "Cedano Business",
   "short_name": "Cedano",
-  "start_url": "/",
+  "start_url": "/the-las-descent/",
   "display": "standalone",
   "background_color": "#0b1012",
   "theme_color": "#22d468",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/the-las-descent/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/the-las-descent/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
  
