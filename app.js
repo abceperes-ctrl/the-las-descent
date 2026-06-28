@@ -1462,7 +1462,11 @@ var _notifCheckInterval = null;
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
   try {
-const reg = await navigator.serviceWorker.register('/the-las-descent/sw.js', { scope: '/the-las-descent/' });    _notifSW = reg; return reg;
+const reg = await navigator.serviceWorker.register('/the-las-descent/sw.js', { scope: '/the-las-descent/' });   _notifSW = reg;
+navigator.serviceWorker.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'REQUEST_STATE_CHECK') checkAndNotify();
+});
+return reg;
   } catch(e) { console.warn('[SW] Error:', e.message); return null; }
 }
 
