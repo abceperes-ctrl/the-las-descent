@@ -1300,7 +1300,11 @@ function addBarberAppointment() {
   const price=Number((document.getElementById("barberPrice")&&document.getElementById("barberPrice").value)||0);
   const empName=(document.getElementById("barberEmployeeSel")&&document.getElementById("barberEmployeeSel").value)||"";
   const emp=state.barberEmployees.find(function(e){ return e.name===empName; });
-  state.barberAppointments.push({id:uid(),client:client,phone:(document.getElementById("barberPhone")&&document.getElementById("barberPhone").value)||"",service:(document.getElementById("barberService")&&document.getElementById("barberService").value)||"",date:(document.getElementById("barberDate")&&document.getElementById("barberDate").value)||today(),time:(document.getElementById("barberTime")&&document.getElementById("barberTime").value)||"",price:price,reminder:true,completed:false,employeeId:emp&&emp.id||""});
+  const newApt = {id:uid(),client:client,phone:(document.getElementById("barberPhone")&&document.getElementById("barberPhone").value)||"",service:(document.getElementById("barberService")&&document.getElementById("barberService").value)||"",date:(document.getElementById("barberDate")&&document.getElementById("barberDate").value)||today(),time:(document.getElementById("barberTime")&&document.getElementById("barberTime").value)||"",price:price,reminder:true,completed:false,employeeId:emp&&emp.id||""};
+  state.barberAppointments.push(newApt);
+  if(newApt.time && state.notifSettings && state.notifSettings.taskReminders) {
+    scheduleBarberNotification(newApt);
+  }
   saveState(); render(); showToast("✅ Cita agendada");
 }
 function addBarberClient() {
@@ -1462,11 +1466,12 @@ var _notifCheckInterval = null;
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return null;
   try {
-const reg = await navigator.serviceWorker.register('/the-las-descent/sw.js', { scope: '/the-las-descent/' });   _notifSW = reg;
-navigator.serviceWorker.addEventListener('message', function(event) {
-  if (event.data && event.data.type === 'REQUEST_STATE_CHECK') checkAndNotify();
-});
-return reg;
+    const reg = await navigator.serviceWorker.register('/the-las-descent/sw.js', { scope: '/the-las-descent/' });
+    _notifSW = reg;
+    navigator.serviceWorker.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'REQUEST_STATE_CHECK') checkAndNotify();
+    });
+    return reg;
   } catch(e) { console.warn('[SW] Error:', e.message); return null; }
 }
 
@@ -1479,13 +1484,42 @@ async function requestNotifPermission() {
 }
 
 async function sendNotification(title, body, tag) {
-  const reg = _notifSW || await registerSW(); if (!reg) return;
-  const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
+  const reg = _notifSW || await registerSW();
+  if (!reg) return;
+  const worker = reg.active || reg.installing || reg.waiting;
+  if (!worker) return;
   worker.postMessage({ type: 'SHOW_NOTIFICATION', title: title, body: body, tag: tag });
 }
 
 function scheduleTaskNotification(task) {
- function scheduleBarberNotification(apt) {
+  if (!task.time || !task.date) return;
+  if (Notification.permission !== 'granted') return;
+  var hours = 0, minutes = 0;
+  const ampmMatch = task.time.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
+  const h24Match  = task.time.trim().match(/^(\d+):(\d+)$/);
+  if (ampmMatch) {
+    hours = parseInt(ampmMatch[1]); minutes = parseInt(ampmMatch[2]);
+    if (ampmMatch[3].toUpperCase() === 'PM' && hours < 12) hours += 12;
+    if (ampmMatch[3].toUpperCase() === 'AM' && hours === 12) hours = 0;
+  } else if (h24Match) {
+    hours = parseInt(h24Match[1]); minutes = parseInt(h24Match[2]);
+  } else return;
+  const taskDate = new Date(task.date + 'T' + String(hours).padStart(2,'0') + ':' + String(minutes).padStart(2,'0') + ':00');
+  const diff = taskDate - new Date();
+  if (diff <= 0) return;
+  if (diff - 15*60*1000 > 0) {
+    setTimeout(function() {
+      const t = state.tasks.find(function(t){ return t.id === task.id; });
+      if (t && !t.done) sendNotification('⏰ Tarea en 15 min', task.text, 'task-15-' + task.id);
+    }, diff - 15*60*1000);
+  }
+  setTimeout(function() {
+    const t = state.tasks.find(function(t){ return t.id === task.id; });
+    if (t && !t.done) sendNotification('✅ Tarea ahora', task.text, 'task-now-' + task.id);
+  }, diff);
+}
+
+function scheduleBarberNotification(apt) {
   if (!apt.time || !apt.date || apt.completed) return;
   if (Notification.permission !== 'granted') return;
   var h = 0, m = 0;
@@ -1501,62 +1535,45 @@ function scheduleTaskNotification(task) {
   const aptDate = new Date(apt.date + 'T' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':00');
   const diff = aptDate - new Date();
   if (diff <= 0) return;
-  const diff30 = diff - 30 * 60 * 1000;
-  if (diff30 > 0) {
+  if (diff - 30*60*1000 > 0) {
     setTimeout(function() {
-      if (!state.barberAppointments.find(function(a){ return a.id === apt.id; }).completed)
-        sendNotification('✂ Cita en 30 min', apt.client + ' — ' + apt.service + ' a las ' + apt.time, 'barber-30-' + apt.id);
-    }, diff30);
+      const a = state.barberAppointments.find(function(a){ return a.id === apt.id; });
+      if (a && !a.completed) sendNotification('✂ Cita en 30 min', apt.client + ' — ' + apt.service + ' a las ' + apt.time, 'barber-30-' + apt.id);
+    }, diff - 30*60*1000);
   }
   setTimeout(function() {
-    if (!state.barberAppointments.find(function(a){ return a.id === apt.id; }).completed)
-      sendNotification('✂ Cita ahora', apt.client + ' — ' + apt.service, 'barber-now-' + apt.id);
-  }, diff);
-}
-   
-   if (!task.time || !task.date) return;
-  if (Notification.permission !== 'granted') return;
-  var hours = 0, minutes = 0;
-  const timeStr = task.time.trim();
-  const ampmMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  const h24Match = timeStr.match(/^(\d+):(\d+)$/);
-  if (ampmMatch) {
-    hours = parseInt(ampmMatch[1]);
-    minutes = parseInt(ampmMatch[2]);
-    const ampm = ampmMatch[3].toUpperCase();
-    if (ampm === 'PM' && hours < 12) hours += 12;
-    if (ampm === 'AM' && hours === 12) hours = 0;
-  } else if (h24Match) {
-    hours = parseInt(h24Match[1]);
-    minutes = parseInt(h24Match[2]);
-  } else { return; }
-  const taskDate = new Date(task.date + 'T' + String(hours).padStart(2,'0') + ':' + String(minutes).padStart(2,'0') + ':00');
-  const now = new Date();
-  const diff = taskDate.getTime() - now.getTime();
-  if (diff <= 0) return;
-  const diffMinus15 = diff - 15 * 60 * 1000;
-  if (diffMinus15 > 0) {
-    setTimeout(function() {
-      if (!task.done) sendNotification('⏰ Tarea en 15 min', task.text, 'task-remind-' + task.id);
-    }, diffMinus15);
-  }
-  setTimeout(function() {
-    if (!task.done) sendNotification('✅ Tarea ahora', task.text, 'task-now-' + task.id);
+    const a = state.barberAppointments.find(function(a){ return a.id === apt.id; });
+    if (a && !a.completed) sendNotification('✂ Cita ahora', apt.client + ' — ' + apt.service, 'barber-now-' + apt.id);
   }, diff);
 }
 
 function scheduleAllPendingTasks() {
- const pendientes = state.tasks.filter(function(t){ return !t.done && t.time && t.date === today(); });
-pendientes.forEach(function(t){ scheduleTaskNotification(t); });
-const citas = state.barberAppointments.filter(function(a){ return !a.completed && a.time && a.date === today(); });
-citas.forEach(function(a){ scheduleBarberNotification(a); });
+  if (!state.notifSettings || !state.notifSettings.taskReminders) return;
+  if (Notification.permission !== 'granted') return;
+  state.tasks
+    .filter(function(t){ return !t.done && t.time && t.date === today(); })
+    .forEach(function(t){ scheduleTaskNotification(t); });
+  state.barberAppointments
+    .filter(function(a){ return !a.completed && a.time && a.date === today(); })
+    .forEach(function(a){ scheduleBarberNotification(a); });
+}
+
 async function checkAndNotify() {
   if (Notification.permission !== 'granted') return;
-  const reg = _notifSW || await registerSW(); if (!reg) return;
-  const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
+  const reg = _notifSW || await registerSW();
+  if (!reg) return;
+  const worker = reg.active || reg.installing || reg.waiting;
+  if (!worker) return;
   worker.postMessage({
     type: 'CHECK_AND_NOTIFY',
-  state: { loans: state.loans||[], barberAppointments: state.barberAppointments||[], billsToPay: state.billsToPay||[], tasks: state.tasks||[], vaperInventory: state.vaperInventory||[], barberClients: state.barberClients||[] },
+    state: {
+      loans:              state.loans              || [],
+      barberAppointments: state.barberAppointments || [],
+      billsToPay:         state.billsToPay          || [],
+      tasks:              state.tasks              || [],
+      vaperInventory:     state.vaperInventory      || [],
+      barberClients:      state.barberClients       || []
+    },
     hora: new Date().getHours()
   });
 }
@@ -1574,18 +1591,17 @@ async function activateNotifications() {
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.Notifications.requestPermission();
-    const granted = OneSignal.Notifications.permission;
-    if (!granted) { showToast('❌ Permiso denegado', 'err'); return; }
+    if (!OneSignal.Notifications.permission) { showToast('❌ Permiso denegado', 'err'); return; }
     state.notifSettings = Object.assign({}, state.notifSettings, { pushEnabled: true, taskReminders: true });
     saveState();
+    await registerSW();
+    scheduleNotifChecks();
+    scheduleAllPendingTasks();
     render();
     showToast('🔔 Notificaciones activadas');
-    await OneSignal.Notifications.push({
-      headings: { en: 'Cedano Business' },
-      contents: { en: '✅ Notificaciones activas' }
-    });
   });
 }
+
 function deactivateNotifications() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
   state.notifSettings = Object.assign({}, state.notifSettings, { pushEnabled: false, taskReminders: false });
@@ -1601,7 +1617,10 @@ async function initNotifications() {
 }
 
 async function testNotification() {
-  if (Notification.permission !== 'granted') { const ok = await requestNotifPermission(); if (!ok) return; }
+  if (Notification.permission !== 'granted') {
+    const ok = await requestNotifPermission();
+    if (!ok) return;
+  }
   await sendNotification('🧠 Cedano Business', '¡Las notificaciones funcionan correctamente!', 'cedano-prueba');
   showToast('🔔 Notificación enviada');
 }
