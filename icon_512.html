@@ -1,0 +1,23 @@
+<div style="padding:1rem 0;text-align:center">
+  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">Clic derecho → Guardar imagen como → <code style="background:var(--surface-0);padding:1px 6px;border-radius:4px">icon-512.png</code></p>
+  <canvas id="c512" width="512" height="512" style="border-radius:16px;width:192px;height:192px;image-rendering:pixelated"></canvas>
+</div>
+<script>
+const c = document.getElementById('c512');
+const ctx = c.getContext('2d');
+const s = 512;
+const r = s * 0.15;
+ctx.fillStyle = '#0b1012';
+ctx.beginPath();
+ctx.moveTo(r,0);ctx.lineTo(s-r,0);ctx.quadraticCurveTo(s,0,s,r);
+ctx.lineTo(s,s-r);ctx.quadraticCurveTo(s,s,s-r,s);
+ctx.lineTo(r,s);ctx.quadraticCurveTo(0,s,0,s-r);
+ctx.lineTo(0,r);ctx.quadraticCurveTo(0,0,r,0);
+ctx.closePath();ctx.fill();
+ctx.fillStyle='#22d468';
+ctx.beginPath();ctx.arc(s/2,s/2,s*0.34,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#000';
+ctx.font='bold 230px Arial,sans-serif';
+ctx.textAlign='center';ctx.textBaseline='middle';
+ctx.fillText('C',s/2,s/2+10);
+</script>
