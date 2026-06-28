@@ -1481,7 +1481,36 @@ async function sendNotification(title, body, tag) {
 }
 
 function scheduleTaskNotification(task) {
-  if (!task.time || !task.date) return;
+ function scheduleBarberNotification(apt) {
+  if (!apt.time || !apt.date || apt.completed) return;
+  if (Notification.permission !== 'granted') return;
+  var h = 0, m = 0;
+  const ampm = apt.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  const h24  = apt.time.match(/^(\d+):(\d+)$/);
+  if (ampm) {
+    h = parseInt(ampm[1]); m = parseInt(ampm[2]);
+    if (ampm[3].toUpperCase() === 'PM' && h < 12) h += 12;
+    if (ampm[3].toUpperCase() === 'AM' && h === 12) h = 0;
+  } else if (h24) {
+    h = parseInt(h24[1]); m = parseInt(h24[2]);
+  } else return;
+  const aptDate = new Date(apt.date + 'T' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':00');
+  const diff = aptDate - new Date();
+  if (diff <= 0) return;
+  const diff30 = diff - 30 * 60 * 1000;
+  if (diff30 > 0) {
+    setTimeout(function() {
+      if (!state.barberAppointments.find(function(a){ return a.id === apt.id; }).completed)
+        sendNotification('✂ Cita en 30 min', apt.client + ' — ' + apt.service + ' a las ' + apt.time, 'barber-30-' + apt.id);
+    }, diff30);
+  }
+  setTimeout(function() {
+    if (!state.barberAppointments.find(function(a){ return a.id === apt.id; }).completed)
+      sendNotification('✂ Cita ahora', apt.client + ' — ' + apt.service, 'barber-now-' + apt.id);
+  }, diff);
+}
+   
+   if (!task.time || !task.date) return;
   if (Notification.permission !== 'granted') return;
   var hours = 0, minutes = 0;
   const timeStr = task.time.trim();
@@ -1513,12 +1542,10 @@ function scheduleTaskNotification(task) {
 }
 
 function scheduleAllPendingTasks() {
-  if (!state.notifSettings || !state.notifSettings.taskReminders) return;
-  if (Notification.permission !== 'granted') return;
-  const pendientes = state.tasks.filter(function(t){ return !t.done && t.time && t.date === today(); });
-  pendientes.forEach(function(t){ scheduleTaskNotification(t); });
-}
-
+ const pendientes = state.tasks.filter(function(t){ return !t.done && t.time && t.date === today(); });
+pendientes.forEach(function(t){ scheduleTaskNotification(t); });
+const citas = state.barberAppointments.filter(function(a){ return !a.completed && a.time && a.date === today(); });
+citas.forEach(function(a){ scheduleBarberNotification(a); });
 async function checkAndNotify() {
   if (Notification.permission !== 'granted') return;
   const reg = _notifSW || await registerSW(); if (!reg) return;
