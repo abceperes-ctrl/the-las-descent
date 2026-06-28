@@ -1591,16 +1591,34 @@ async function activateNotifications() {
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.Notifications.requestPermission();
-    if (!OneSignal.Notifications.permission) { showToast('❌ Permiso denegado', 'err'); return; }
-    state.notifSettings = Object.assign({}, state.notifSettings, { pushEnabled: true, taskReminders: true });
+    if (!OneSignal.Notifications.permission) {
+      showToast('❌ Permiso denegado', 'err'); return;
+    }
+ 
+    // Vincular este dispositivo al usuario actual
+    const userId = window._cedanoCurrentUser?.id;
+    if (userId) {
+      try {
+        await OneSignal.login(userId);
+        console.log('[OneSignal] Dispositivo vinculado al usuario:', userId);
+      } catch(e) {
+        console.warn('[OneSignal] Error al vincular dispositivo:', e.message);
+      }
+    }
+ 
+    state.notifSettings = Object.assign({}, state.notifSettings, {
+      pushEnabled: true,
+      taskReminders: true
+    });
     saveState();
     await registerSW();
     scheduleNotifChecks();
     scheduleAllPendingTasks();
     render();
-    showToast('🔔 Notificaciones activadas');
+    showToast('🔔 Notificaciones activadas en este dispositivo');
   });
 }
+ 
 
 function deactivateNotifications() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
