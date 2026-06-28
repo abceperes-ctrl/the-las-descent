@@ -1,3 +1,5 @@
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(clients.claim()));
 
@@ -9,8 +11,5 @@ self.addEventListener('message', event => {
       tag: tag || 'cedano',
       icon: '/the-las-descent/icon-192.png'
     });
-  }
-  if (type === 'CHECK_AND_NOTIFY') {
-    // lógica de verificación periódica si la necesitas
   }
 });
