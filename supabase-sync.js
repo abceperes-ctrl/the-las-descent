@@ -24,6 +24,33 @@ function showSyncBadge(msg, color) {
   el._t = setTimeout(() => { el.style.opacity = '0'; }, 3500);
 }
 
+/* ── Vincular usuario con OneSignal (multi-dispositivo) ── */
+function linkOneSignalToUser(userId) {
+  if (!userId) return;
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    try {
+      await OneSignal.login(userId);
+      console.log('[OneSignal] Usuario vinculado:', userId);
+    } catch(e) {
+      console.warn('[OneSignal] Error al vincular usuario:', e.message);
+    }
+  });
+}
+
+/* ── Desvincular usuario de OneSignal al cerrar sesión ── */
+function unlinkOneSignalUser() {
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    try {
+      await OneSignal.logout();
+      console.log('[OneSignal] Usuario desvinculado');
+    } catch(e) {
+      console.warn('[OneSignal] Error al desvincular:', e.message);
+    }
+  });
+}
+
 /* ── Aplicar datos remotos al estado local ── */
 function applyRemoteData(remoteData) {
   const KEY = 'CEDANO_V6';
@@ -277,6 +304,7 @@ function translateAuthError(msg) {
 async function cerrarSesion() {
   if (!confirm('¿Cerrar sesión?')) return;
   const db = window._cedanoDb;
+  unlinkOneSignalUser();
   if (db) await db.auth.signOut();
   localStorage.removeItem('CEDANO_V6');
   localStorage.removeItem('CEDANO_AI_HIST');
@@ -403,6 +431,7 @@ async function initSupabase() {
         return;
       }
       window._cedanoCurrentUser = session.user;
+      linkOneSignalToUser(session.user.id);
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
       const remoteData = await loadUserData(db, session.user.id);
       if (remoteData) {
@@ -425,6 +454,7 @@ async function initSupabase() {
       if (window._cedanoCurrentUser?.id === session.user.id) return;
 
       window._cedanoCurrentUser = session.user;
+      linkOneSignalToUser(session.user.id);
       const authScreen = document.getElementById('cedano-auth-screen');
       if (authScreen) authScreen.remove();
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
