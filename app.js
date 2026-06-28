@@ -1537,18 +1537,24 @@ function scheduleNotifChecks() {
 }
 
 async function activateNotifications() {
-  const reg = await registerSW();
-  if (!reg) { showToast('❌ Notificaciones no soportadas','err'); return; }
-  const granted = await requestNotifPermission(); if (!granted) return;
-  state.notifSettings = Object.assign({}, state.notifSettings, { pushEnabled: true, taskReminders: true });
-  saveState();
-  scheduleNotifChecks();
-  scheduleAllPendingTasks();
-  render();
-  showToast('🔔 Notificaciones activadas');
-  setTimeout(function(){ sendNotification('✅ Cedano Business', 'Las notificaciones están activas.', 'cedano-test'); }, 1000);
+  if (typeof OneSignal === 'undefined' && !window.OneSignalDeferred) {
+    showToast('❌ OneSignal no cargó', 'err'); return;
+  }
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.Notifications.requestPermission();
+    const granted = OneSignal.Notifications.permission;
+    if (!granted) { showToast('❌ Permiso denegado', 'err'); return; }
+    state.notifSettings = Object.assign({}, state.notifSettings, { pushEnabled: true, taskReminders: true });
+    saveState();
+    render();
+    showToast('🔔 Notificaciones activadas');
+    await OneSignal.Notifications.push({
+      headings: { en: 'Cedano Business' },
+      contents: { en: '✅ Notificaciones activas' }
+    });
+  });
 }
-
 function deactivateNotifications() {
   if (_notifCheckInterval) clearInterval(_notifCheckInterval);
   state.notifSettings = Object.assign({}, state.notifSettings, { pushEnabled: false, taskReminders: false });
