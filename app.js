@@ -1556,7 +1556,7 @@ async function checkAndNotify() {
   const worker = reg.active || reg.installing || reg.waiting; if (!worker) return;
   worker.postMessage({
     type: 'CHECK_AND_NOTIFY',
-    state: { loans: state.loans||[], barberAppointments: state.barberAppointments||[], billsToPay: state.billsToPay||[], tasks: state.tasks||[] },
+  state: { loans: state.loans||[], barberAppointments: state.barberAppointments||[], billsToPay: state.billsToPay||[], tasks: state.tasks||[], vaperInventory: state.vaperInventory||[], barberClients: state.barberClients||[] },
     hora: new Date().getHours()
   });
 }
