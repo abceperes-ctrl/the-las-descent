@@ -77,20 +77,22 @@ function subscribeRealtime(db, userId) {
         table: 'cedano_state',
         filter: 'user_id=eq.' + userId
       },
-      (payload) => {
-        console.log('[Realtime] UPDATE recibido para usuario:', userId);
-        const remoteData = payload.new?.data;
-        if (!remoteData) return;
+     (payload) => {
+  console.log('[Realtime] UPDATE recibido:', payload.new?.updated_at, '| local:', window.state?._updatedAt);
+  const remoteData = payload.new?.data;
+  if (!remoteData) return;
 
-        const remoteTs = payload.new?.updated_at || '2000-01-01';
-        const localTs = (window.state && window.state._updatedAt) || '2000-01-01';
+  const remoteTs = payload.new?.updated_at || '2000-01-01';
+  const localTs = (window.state && window.state._updatedAt) || '2000-01-01';
 
-        if (new Date(remoteTs) > new Date(localTs)) {
-          showSyncBadge('☁ Actualizando...', '#4db5ff');
-          applyRemoteData(remoteData);
-          showSyncBadge('☁ Sincronizado ✓', '#22d468');
-        }
-      }
+  console.log('[Realtime] ¿aplicar?', new Date(remoteTs) > new Date(localTs));
+
+  if (new Date(remoteTs) > new Date(localTs)) {
+    showSyncBadge('☁ Actualizando...', '#4db5ff');
+    applyRemoteData(remoteData);
+    showSyncBadge('☁ Sincronizado ✓', '#22d468');
+  }
+}
     )
     .subscribe((status, err) => {
       console.log('[Realtime] Status:', status, err || '');
