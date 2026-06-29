@@ -87,8 +87,8 @@ function subscribeRealtime(db, userId) {
 
   console.log('[Realtime] ¿aplicar?', new Date(remoteTs) > new Date(localTs));
 
-  if (new Date(remoteTs) > new Date(localTs)) {
-    showSyncBadge('☁ Actualizando...', '#4db5ff');
+const diff = new Date(remoteTs) - new Date(localTs);
+if (diff > 2000) {    showSyncBadge('☁ Actualizando...', '#4db5ff');
     applyRemoteData(remoteData);
     showSyncBadge('☁ Sincronizado ✓', '#22d468');
   }
