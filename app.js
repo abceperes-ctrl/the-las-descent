@@ -1645,11 +1645,6 @@ async function testNotification() {
 
 /* ── INIT ── */
 document.body.classList.toggle("light-mode", !darkMode);
-checkDayReset();
-checkBackupReminder();
-checkWeeklyReview();
-setTimeout(checkBirthdays, 5000);
-setTimeout(initNotifications, 3000);
 
 window._cedanoRenderSafetyNet = setTimeout(function() {
   const sk = document.getElementById('skeletonLoader');
