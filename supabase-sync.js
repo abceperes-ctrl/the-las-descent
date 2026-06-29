@@ -333,17 +333,20 @@ async function loadUserData(db, userId) {
   }
 
   if (!data || !data.data) {
+    // No hay datos remotos — subir localStorage si existe, si no devolver null (cuenta nueva)
     const localRaw = localStorage.getItem(KEY);
     if (localRaw) {
-      const parsed = JSON.parse(localRaw);
-      await db.from('cedano_state').upsert({
-        user_id: userId, data: parsed, updated_at: new Date().toISOString()
-      });
-      showSyncBadge('☁ Datos iniciales subidos', '#22d468');
-      return parsed;
+      try {
+        const parsed = JSON.parse(localRaw);
+        await db.from('cedano_state').upsert({
+          user_id: userId, data: parsed, updated_at: new Date().toISOString()
+        });
+        showSyncBadge('☁ Datos iniciales subidos', '#22d468');
+        return parsed;
+      } catch(e) {}
     }
     showSyncBadge('☁ Cuenta nueva — iniciando', '#22d468');
-    return null;
+    return null; // cuenta nueva, sin datos
   }
 
   const localRaw = localStorage.getItem(KEY);
@@ -351,10 +354,12 @@ async function loadUserData(db, userId) {
   const remoteTs = data.updated_at || '2000-01-01';
 
   if (new Date(remoteTs) >= new Date(localTs)) {
+    // Remoto es más nuevo o igual → usar remoto
     localStorage.setItem(KEY, JSON.stringify(data.data));
     showSyncBadge('☁ Sincronizado', '#22d468');
     return data.data;
   } else {
+    // Local es más nuevo → subir local
     const parsed = JSON.parse(localRaw);
     await db.from('cedano_state').upsert({
       user_id: userId, data: parsed, updated_at: new Date().toISOString()
@@ -397,6 +402,39 @@ function _forceClearSkeleton() {
 }
 
 /* =========================================================
+   HELPER — aplicar state remoto y ejecutar funciones post-carga
+   ESTA es la única función que debe tocar `state` al inicio
+   ========================================================= */
+function _applyLoadedState(remoteData, user) {
+  const KEY = 'CEDANO_V6';
+
+  if (remoteData) {
+    // Tenemos datos reales del servidor
+    localStorage.setItem(KEY, JSON.stringify(remoteData));
+    state        = remoteData;
+    window.state = remoteData;
+  } else {
+    // Cuenta nueva sin datos — usar initialState (definido en app.js)
+    state        = JSON.parse(JSON.stringify(initialState));
+    window.state = state;
+  }
+
+  // Sincronizar nombre de usuario desde auth metadata
+  if (user && user.user_metadata && user.user_metadata.display_name) {
+    if (!state.userName || state.userName === 'Royer') {
+      state.userName = user.user_metadata.display_name;
+    }
+  }
+
+  // AHORA es seguro hacer checkDayReset — state ya tiene datos reales
+  if (typeof checkDayReset       === 'function') checkDayReset();
+  if (typeof checkBackupReminder === 'function') checkBackupReminder();
+  if (typeof checkWeeklyReview   === 'function') checkWeeklyReview();
+  if (typeof initNotifications   === 'function') setTimeout(initNotifications, 1000);
+  if (typeof checkBirthdays      === 'function') setTimeout(checkBirthdays, 3000);
+}
+
+/* =========================================================
    INIT PRINCIPAL
    ========================================================= */
 async function initSupabase() {
@@ -424,57 +462,55 @@ async function initSupabase() {
   db.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth] Evento:', event, session?.user?.email || '(sin usuario)');
 
+    /* ── Sin sesión al inicio ── */
     if (event === 'INITIAL_SESSION') {
       if (!session) {
         _forceClearSkeleton();
         renderAuthScreen();
         return;
       }
+
+      // Hay sesión válida → cargar datos remotos PRIMERO
       window._cedanoCurrentUser = session.user;
       linkOneSignalToUser(session.user.id);
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
+
       const remoteData = await loadUserData(db, session.user.id);
-      if (remoteData) {
-        localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
-        state        = remoteData;
-        window.state = remoteData;
-        if (!window.state.userName && session.user.user_metadata?.display_name) {
-          window.state.userName = session.user.user_metadata.display_name;
-          if (typeof saveState === 'function') saveState();
-        }
-        if (typeof checkDayReset === 'function') checkDayReset();
-      }
+
+      // Aplicar state con datos reales (o initialState si cuenta nueva)
+      _applyLoadedState(remoteData, session.user);
+
       _forceClearSkeleton();
       subscribeRealtime(db, session.user.id);
       if (typeof render === 'function') render();
       return;
     }
 
+    /* ── Login exitoso (desde pantalla de auth) ── */
     if (event === 'SIGNED_IN' && session?.user) {
+      // Evitar doble ejecución si el usuario ya estaba cargado
       if (window._cedanoCurrentUser?.id === session.user.id) return;
 
       window._cedanoCurrentUser = session.user;
       linkOneSignalToUser(session.user.id);
+
       const authScreen = document.getElementById('cedano-auth-screen');
       if (authScreen) authScreen.remove();
+
       showSyncBadge('☁ Cargando datos...', '#4db5ff');
+
       const remoteData = await loadUserData(db, session.user.id);
+
+      // Aplicar state con datos reales
+      _applyLoadedState(remoteData, session.user);
+
       _forceClearSkeleton();
-      if (remoteData) {
-        localStorage.setItem('CEDANO_V6', JSON.stringify(remoteData));
-        state        = remoteData;
-        window.state = remoteData;
-        if (!window.state.userName && session.user_metadata?.display_name) {
-          window.state.userName = session.user_metadata.display_name;
-          if (typeof saveState === 'function') saveState();
-        }
-        if (typeof checkDayReset === 'function') checkDayReset();
-      }
       subscribeRealtime(db, session.user.id);
       if (typeof render === 'function') render();
       return;
     }
 
+    /* ── Cierre de sesión ── */
     if (event === 'SIGNED_OUT') {
       window._cedanoCurrentUser = null;
       localStorage.removeItem('CEDANO_V6');
