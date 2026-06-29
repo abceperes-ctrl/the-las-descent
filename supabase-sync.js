@@ -464,30 +464,25 @@ async function initSupabase() {
   db.auth.onAuthStateChange(async (event, session) => {
     console.log('[Auth] Evento:', event, session?.user?.email || '(sin usuario)');
 
-    /* ── Sin sesión al inicio ── */
-    if (event === 'INITIAL_SESSION') {
-      if (!session) {
-        _forceClearSkeleton();
-        renderAuthScreen();
-        return;
-      }
-
-      // Hay sesión válida → cargar datos remotos PRIMERO
-      window._cedanoCurrentUser = session.user;
-      linkOneSignalToUser(session.user.id);
-      showSyncBadge('☁ Cargando datos...', '#4db5ff');
-
-      const remoteData = await loadUserData(db, session.user.id);
-
-      // Aplicar state con datos reales (o initialState si cuenta nueva)
-      _applyLoadedState(remoteData, session.user);
-
-      _forceClearSkeleton();
-      subscribeRealtime(db, session.user.id);
-      if (typeof render === 'function') render();
-      return;
-    }
-
+ /* ── Sin sesión al inicio ── */
+if (event === 'INITIAL_SESSION') {
+  if (!session) {
+    _forceClearSkeleton();
+    renderAuthScreen();
+    return;
+  }
+  console.log('[Auth] INITIAL_SESSION con usuario:', session.user.email);
+  window._cedanoCurrentUser = session.user;
+  linkOneSignalToUser(session.user.id);
+  showSyncBadge('☁ Cargando datos...', '#4db5ff');
+  const remoteData = await loadUserData(db, session.user.id);
+  _applyLoadedState(remoteData, session.user);
+  _forceClearSkeleton();
+  console.log('[Realtime] Intentando suscribir desde INITIAL_SESSION para:', session.user.id);
+  subscribeRealtime(db, session.user.id);
+  if (typeof render === 'function') render();
+  return;
+}
     /* ── Login exitoso (desde pantalla de auth) ── */
     if (event === 'SIGNED_IN' && session?.user) {
       // Evitar doble ejecución si el usuario ya estaba cargado
