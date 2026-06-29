@@ -484,28 +484,27 @@ if (event === 'INITIAL_SESSION') {
   return;
 }
     /* ── Login exitoso (desde pantalla de auth) ── */
-    if (event === 'SIGNED_IN' && session?.user) {
-      // Evitar doble ejecución si el usuario ya estaba cargado
-      if (window._cedanoCurrentUser?.id === session.user.id) return;
+  if (event === 'SIGNED_IN' && session?.user) {
+  console.log('[Auth] SIGNED_IN - currentUser:', window._cedanoCurrentUser?.id, '| nuevo:', session.user.id);
 
-      window._cedanoCurrentUser = session.user;
-      linkOneSignalToUser(session.user.id);
+  if (window._cedanoCurrentUser?.id === session.user.id) {
+    console.log('[Auth] SIGNED_IN ignorado - mismo usuario');
+    return;
+  }
 
-      const authScreen = document.getElementById('cedano-auth-screen');
-      if (authScreen) authScreen.remove();
-
-      showSyncBadge('☁ Cargando datos...', '#4db5ff');
-
-      const remoteData = await loadUserData(db, session.user.id);
-
-      // Aplicar state con datos reales
-      _applyLoadedState(remoteData, session.user);
-
-      _forceClearSkeleton();
-      subscribeRealtime(db, session.user.id);
-      if (typeof render === 'function') render();
-      return;
-    }
+  window._cedanoCurrentUser = session.user;
+  linkOneSignalToUser(session.user.id);
+  const authScreen = document.getElementById('cedano-auth-screen');
+  if (authScreen) authScreen.remove();
+  showSyncBadge('☁ Cargando datos...', '#4db5ff');
+  const remoteData = await loadUserData(db, session.user.id);
+  _applyLoadedState(remoteData, session.user);
+  _forceClearSkeleton();
+  console.log('[Realtime] Intentando suscribir desde SIGNED_IN');
+  subscribeRealtime(db, session.user.id);
+  if (typeof render === 'function') render();
+  return;
+}
 
     /* ── Cierre de sesión ── */
     if (event === 'SIGNED_OUT') {
